@@ -64,13 +64,13 @@ adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.4.apk
 
 ## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
 
-> **L55M9-S 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启——本机系统连无障碍设置页都没有，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
+> **MiTV-MFTR0 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启——本机系统连无障碍设置页都没有，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
 
 设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**。
 
 ### 为什么是无障碍服务，而不是前台服务
 
-v0.4.0-fkuxmtv.3 用前台服务守 `ACTION_SCREEN_ON`，在 L55M9-S 上从未启动过一次。实机日志：
+v0.4.0-fkuxmtv.3 用前台服务守 `ACTION_SCREEN_ON`，在 MiTV-MFTR0 上从未启动过一次。实机日志：
 
 ```
 21:52:24.990 AppsRelaunchController: Refused to start foreground service:
@@ -156,20 +156,20 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 两个“不算息屏”的例外：
 
 1. **直接断电 / 关机再开机**：走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效——但这是重启，不是息屏唤醒。
-2. **固件升级后 MIUI 改了 `killAllThirdApp` 策略**：未来的事，未发生。
+2. **固件升级后 MIUI 改了 `killAllThirdApp` 策略**：未来的事，未发生——毕竟这台电视已经停在澎湃2.0.23.0（笑
 
 结论：**这台电视上，息屏唤醒 = 回小米桌面，属于固件层面的硬约束。** 真要打破只有一条路——root 后 patch `MitvActivityManagerService`。为唤醒功能给电视 root 刷机，值不值自己掂量，本分支不做。
 
 ## 仓库与分发边界
 
-- 本仓库**只存放代码**。自选壁纸（`assets/wallpapers/local/`）与构建产物（APK）**不进仓库、不发 GitHub Release**：这些照片没有公开再分发授权，仓库又是上游的公开 fork，无法转私有。
+- 本仓库**只存放代码**。自选壁纸（`assets/wallpapers/local/`）与构建产物（APK）**不进仓库、不发 GitHub Release**。
 - APK 只在本地 `../dist/` 保留，用 adb 或 U 盘安装。
 - 需要重新打包时把照片目录放在本机，按上面「壁纸打包」跑一遍脚本即可，`local/` 始终被 Git 忽略。
 
 ## 已知限制
 
-- HDMI 端口号（23 = HDMI 1、24 = HDMI 2）是在 `MiTV-MTSU0` 固件上实测得到的。L55M9-S 上沿用同一套小米 `com.xiaomi.mitv.tvplayer` 组件；若该固件不接受 `input` 参数，会退回信号源列表让你手选，不会闪退。
-- 已在真机 `MiTV-MTSU0` 验证；L55M9-S 尚未实机验证（无设备），首次安装请先确认 HDMI 按钮行为。
+- HDMI 端口号（23 = HDMI 1、24 = HDMI 2）是在原仓库 `MiTV-MTSU0` 固件上实测得到的。MiTV-MFTR0 上沿用同一套小米 `com.xiaomi.mitv.tvplayer` 组件；若该固件不接受 `input` 参数，会退回信号源列表让你手选，不会闪退。
+- 已在真机 `MiTV-MFTR0` 验证，首次安装请先确认 HDMI 按钮行为。
 - 本分支签名与上游官方 APK 不同，不能覆盖安装原版，也不能被原版覆盖。
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
 - **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
