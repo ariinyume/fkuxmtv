@@ -59,6 +59,12 @@ adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.2.apk
 
 与原版包名不同，可与原版共存；两者设置互不迁移，卸载任一方不影响另一方。
 
+## 仓库与分发边界
+
+- 本仓库**只存放代码**。自选壁纸（`assets/wallpapers/local/`）与构建产物（APK）**不进仓库、不发 GitHub Release**：这些照片没有公开再分发授权，仓库又是上游的公开 fork，无法转私有。
+- APK 只在本地 `../dist/` 保留，用 adb 或 U 盘安装。
+- 需要重新打包时把照片目录放在本机，按上面「壁纸打包」跑一遍脚本即可，`local/` 始终被 Git 忽略。
+
 ## 已知限制
 
 - HDMI 端口号（23 = HDMI 1、24 = HDMI 2）是在 `MiTV-MTSU0` 固件上实测得到的。L55M9-S 上沿用同一套小米 `com.xiaomi.mitv.tvplayer` 组件；若该固件不接受 `input` 参数，会退回信号源列表让你手选，不会闪退。
