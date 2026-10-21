@@ -11,15 +11,17 @@
 | 默认次项 | Apple TV → HDMI 1 | Apple TV → HDMI 2（避免与 Switch 2 抢端口） |
 | 首项图标 | PlayStation 标志 | Nintendo Switch 标志（`mark_nintendo_switch.xml`，Simple Icons CC0） |
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
-| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.2` / code 7 |
+| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.3` / code 8 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
 | 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L55M9*` 等），含目标机 **L55M9-S**；HDMI 直达不再硬性依赖机型名 |
+| 唤醒进入 | 无 | 亮屏时若前台是小米原桌面，拉起本桌面一次（默认关闭，见下） |
 
 改动文件：
 
 - `app/build.gradle`：`namespace` / `applicationId` / `versionCode` / `versionName`
 - `app/src/main/java/io/github/ariinyume/fkuxmtv/*`：源码目录与 `package` 声明整体迁移
 - `HomeItems.java`：`DEFAULTS` 顺序与默认名称
+- `WakeHome.java` / `WakeService.java` / `WakePolicy.java` / `WakeBootReceiver.java`：唤醒进入（新增）
 - `HomeIcons.java`：`hdmi:1` → Switch 图标，`hdmi:2` → Apple TV 图标
 - `res/values/styles.xml`：`app_name`
 - `assets/icons/nintendoswitch.svg` + `SOURCES.json`、`res/drawable/mark_nintendo_switch.xml`：新增图标
@@ -58,6 +60,31 @@ adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.2.apk
 ```
 
 与原版包名不同，可与原版共存；两者设置互不迁移，卸载任一方不影响另一方。
+
+## 唤醒后进入桌面（v0.4.0-fkuxmtv.3）
+
+设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**，开启后由一个前台服务常驻监听亮屏。
+
+放行条件（全部满足才拉一次，任何一条不满足都不动画面）：
+
+1. 开关处于开启状态；
+2. 机型受支持（小米电视家族）；
+3. 屏幕仍是亮的，且距离本次 SCREEN_ON 不超过 8 秒；
+4. 本次唤醒尚未处理过（一次唤醒只拉一次，SCREEN_OFF 才重置）；
+5. 能读到前台应用（读不到就一律不动，不猜）；
+6. 前台包名严格等于 `com.mitv.tvhome`（小米原桌面）；
+7. 本桌面当时不在前台；
+8. 距上次拉起超过 4 秒（防抖）。
+
+因此：唤醒直接进 HDMI、在爱奇艺/B 站里睡着、游戏中途亮屏，前台都不是小米桌面，一律不抢画面。判断在亮屏后约 1.5 秒做一次；只有"前台未知"才会再补一次 1.1 秒后的重试，一旦拿到明确答案就结束本次唤醒。
+
+前提权限：**使用情况访问**（`PACKAGE_USAGE_STATS`）。系统设置里没有这一项时，用 adb：
+
+```sh
+adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
+```
+
+被 HyperOS 后台拉起限制拦下时，会记录"系统拦截，未拉起"，可在设置里授予悬浮窗权限再试。诊断信息在 `adb shell dumpsys activity io.github.ariinyume.fkuxmtv` 的 `Wake:` 行。
 
 ## 仓库与分发边界
 

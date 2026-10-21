@@ -84,13 +84,13 @@ public final class FrameHomeActivity extends Activity implements HomeSurface.Act
         library=new AlertDialog.Builder(this).setTitle("全部应用").setItems(labels,(d,i)->open(ids.get(i))).setNegativeButton("返回",null).create();
         library.setOnDismissListener(d->{surface.controls.get(0).requestFocus();updateRotation();});library.show();updateRotation();
     }
-    @Override protected void onResume(){super.onResume();resumed=true;BootStart.confirm(this);handler.removeCallbacks(tick);tick.run();updateRotation();}
+    @Override protected void onResume(){super.onResume();resumed=true;WakeHome.visible=true;if(WakeHome.enabled(this))WakeHome.start(this);BootStart.confirm(this);handler.removeCallbacks(tick);tick.run();updateRotation();}
     @Override protected void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);}
-    @Override protected void onPause(){resumed=false;weather.active(false);handler.removeCallbacks(tick);wallpapers.pause();if(library!=null)library.dismiss();super.onPause();}
+    @Override protected void onPause(){resumed=false;WakeHome.visible=false;weather.active(false);handler.removeCallbacks(tick);wallpapers.pause();if(library!=null)library.dismiss();super.onPause();}
     @Override protected void onDestroy(){settings.close();weather.destroy();wallpapers.destroy();handler.removeCallbacksAndMessages(null);super.onDestroy();}
     @Override public void onBackPressed(){if(surface.controls.contains(getCurrentFocus()))surface.focusApp();else if(XiaomiControls.enabled())stockHome();else super.onBackPressed();}
     @Override public void dump(String prefix,java.io.FileDescriptor fd,java.io.PrintWriter out,String[] args){
-        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);weather.dump(out);
+        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);WakeHome.dump(this,out);weather.dump(out);
         out.println("HomeAppearance: "+appearance.prefs.getAll()+" items="+items.order+" settings="+settings.page());
     }
     void message(String value){Toast.makeText(this,value,Toast.LENGTH_LONG).show();}
