@@ -64,7 +64,7 @@ adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.4.apk
 
 ## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
 
-> **L55M9-S 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
+> **L55M9-S 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启——本机系统连无障碍设置页都没有，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
 
 设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**。
 
@@ -130,6 +130,7 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 | 能力 | 结果 | 说明 |
 | --- | --- | --- |
 | 桌面本体 / 壁纸 / 首页入口 | ✅ | 安装后直接可用 |
+| Switch 2 → HDMI 1 直达 | ✅ | 实机点按可直达（`com.xiaomi.mitv.tvplayer` + `input=23`） |
 | 开机自动进入 | ✅ | 走完整开机链，`start_3rd_app` 生效，重启后仍正常 |
 | 息屏唤醒进入桌面 | ❌ | 链路断死，见下 |
 
@@ -147,6 +148,8 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 应用在前台按电源键 —— 杀；
 - 先退回小米桌面再按 —— 照样杀；
 - 想绕开电源键用空闲息屏 —— 这台固件的 `sleep_timeout` 是摆设，电源键是唯一的息屏路径。
+
+还有一个更直接的死结：**本机系统里没有无障碍设置页**，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”，所以连手动开启的入口都不存在（只能靠 adb 写 `settings put secure`，而写了也会被下次息屏撤销）。也就是说这个开关在本机型上是纯粹的摆设。
 
 设计上是个死结：前台服务被固件封杀（`AppsRelaunchController: isCallerSystem=false`，见上节），`BOOT_COMPLETED` 只负责“武装”不负责“监听屏幕”，于是无障碍服务成了唯一入口——而入口每息屏一次就被拆一次。入口被拆，代码侧无解。
 
@@ -171,4 +174,4 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
 - **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
 - 开机自动进入依赖 `start_3rd_app`（ADB 一次性配置）。固件升级后该接口可能变化，升级后请重新确认。
-- HDMI 端口映射（`input=23` / `24`）沿用 MiTV-MTSU0 的实测值，L55M9-S 上未单独做端口核验。
+- HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；L55M9-S 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
