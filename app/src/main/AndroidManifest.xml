@@ -8,6 +8,12 @@
          Granted through app-ops, not at install time. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Boot entry (plan A). RECEIVE_BOOT_COMPLETED gets us the broadcast;
+         SYSTEM_ALERT_WINDOW is the Android 10+ exemption that makes the background
+         activity start from that broadcast legal. The app-op must be allowed once via
+         adb (pm grant / appops set) - on its own it silences nothing else. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <queries>
@@ -19,6 +25,7 @@
         <package android:name="com.android.settings" />
         <intent><action android:name="android.settings.ACCESSIBILITY_SETTINGS" /></intent>
         <intent><action android:name="android.settings.SETTINGS" /></intent>
+        <intent><action android:name="android.settings.action.MANAGE_OVERLAY_PERMISSION" /></intent>
     </queries>
     <application android:label="@string/app_name" android:icon="@drawable/ic_launcher"
         android:banner="@drawable/banner" android:theme="@style/Theme.GuiZangTV"
@@ -49,6 +56,14 @@
                 <category android:name="android.intent.category.INFO" />
             </intent-filter>
         </activity>
+        <!-- Plan A: enter the home once per full boot, straight from the system broadcast.
+             Everything is gated by BootStartPolicy (switch, model, once per boot), so a
+             stray or duplicate broadcast does nothing. -->
+        <receiver android:name=".BootReceiver" android:exported="true" android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <!-- Not running unless the user enables it in system accessibility settings, and it
              does nothing while the in-app switch is off. Reads package names only. -->
         <service android:name=".WakeAccessibilityService" android:exported="true"

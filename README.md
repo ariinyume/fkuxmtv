@@ -66,7 +66,8 @@ adb install -r guizang-tv-v0.3.0.apk
 | --- | --- |
 | 桌面本体、壁纸、首页入口 | ✅ 安装即可用 |
 | Switch 2 → HDMI 1 直达 | ✅ 点按可直达（与 MiTV-MTSU0 同为 23 端口） |
-| 开机自动进入（走完整开机链） | ✅ 生效，重启后仍在 |
+| 开机自动进入（`start_3rd_app`，走完整开机链） | ✅ 生效，重启后仍在 |
+| 开机自动进入（v0.5 系统 `BOOT_COMPLETED`） | ⏳ 待实机复验；需一次 `adb shell appops set … SYSTEM_ALERT_WINDOW allow` |
 | 息屏唤醒进入桌面（v0.4 无障碍方案） | ❌ 本固件上不可能，见下 |
 
 **为什么息屏唤醒在这台电视上做不到**：按电源键息屏时固件执行 `killAllThirdApp`，本应用进程被杀，无障碍服务被系统从设置里踢掉并打上 crashed 标记；再亮屏时已经没有人监听 `SCREEN_ON` 和窗口事件，画面直接由小米桌面接管。

@@ -11,9 +11,10 @@
 | 默认次项 | Apple TV → HDMI 1 | Apple TV → HDMI 2（避免与 Switch 2 抢端口） |
 | 首项图标 | PlayStation 标志 | Nintendo Switch 标志（`mark_nintendo_switch.xml`，Simple Icons CC0） |
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
-| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.4` / code 9 |
+| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.5` / code 10 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
 | 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L55M9*` 等），含目标机 **L55M9-S**；HDMI 直达不再硬性依赖机型名 |
+| 开机进入 | 无（依赖小米 `start_3rd_app`） | 吃系统 `BOOT_COMPLETED`，`SYSTEM_ALERT_WINDOW` 作后台启动豁免；`start_3rd_app` 保留兜底 |
 | 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭；**本机实测不可用**，见下） |
 
 改动文件：
@@ -21,6 +22,8 @@
 - `app/build.gradle`：`namespace` / `applicationId` / `versionCode` / `versionName`
 - `app/src/main/java/io/github/ariinyume/fkuxmtv/*`：源码目录与 `package` 声明整体迁移
 - `HomeItems.java`：`DEFAULTS` 顺序与默认名称
+- `BootReceiver.java`：系统开机广播入口（新增）；`BootStart.java`：新增 `enterFromBoot()`、悬浮窗状态与授权入口
+- `AndroidManifest.xml`：`RECEIVE_BOOT_COMPLETED` + `SYSTEM_ALERT_WINDOW`，注册 `BootReceiver`
 - `WakeHome.java` / `WakePolicy.java` / `WakeAccessibilityService.java`：唤醒进入（新增）
 - `res/xml/accessibility_service_config.xml`：只接收窗口切换事件，不读窗口内容
 - `HomeIcons.java`：`hdmi:1` → Switch 图标，`hdmi:2` → Apple TV 图标
@@ -57,10 +60,50 @@
 
 ```sh
 adb connect <电视IP>:5555
-adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.4.apk
+adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.5.apk
+# 开机自动进入需要的豁免（重装后要重做一次）
+adb shell appops set io.github.ariinyume.fkuxmtv SYSTEM_ALERT_WINDOW allow
 ```
 
 与原版包名不同，可与原版共存；两者设置互不迁移，卸载任一方不影响另一方。
+
+## 开机自动进入（方案 A：系统开机广播）
+
+v0.4.0-fkuxmtv.5 起，开机进入不再依赖小米的 `start_3rd_app`，直接吃系统的 `BOOT_COMPLETED`。
+
+| 环节 | 实现 |
+| --- | --- |
+| 权限 | `RECEIVE_BOOT_COMPLETED` + `SYSTEM_ALERT_WINDOW`（后者是 Android 10+ 后台启动 Activity 的官方豁免） |
+| 接收器 | `BootReceiver`，`exported="true"`，只听 `BOOT_COMPLETED` |
+| 动作 | `startActivity(FrameHomeActivity)`，带 `NEW_TASK \| CLEAR_TOP`，并写入本次 `boot_count` 供 `BootStart.confirm()` 记录状态 |
+| 闸门 | 复用 `BootStartPolicy`：开关开 + 机型受支持 + 本次开机未尝试过 + 开机 10 分钟内 |
+| 重试 | 只有首次 `startActivity` 抛异常才在 2.5 秒后重试一次（`goAsync`）；成功即标记，不重复 |
+
+开关在 设置 → 电视与启动 → 开机自动进入，**默认开启**（新装即生效）；关掉后两条路径都不再拉起。
+`start_3rd_app` 那条老路保留作兜底，两条路共用 `attempted` 计数，同一次开机只会进一次。
+
+授权（只需一次，重装后要重做）：
+
+```sh
+adb shell appops set io.github.ariinyume.fkuxmtv SYSTEM_ALERT_WINDOW allow
+adb shell appops get io.github.ariinyume.fkuxmtv SYSTEM_ALERT_WINDOW
+```
+
+`pm grant ... SYSTEM_ALERT_WINDOW` 在部分固件上会报「不是可更改的权限类型」，`appops set` 才稳。
+没有这个 app-op，开机广播照样收得到，但 `startActivity` 会被后台启动限制拦下——日志里会有
+`GuiZangBoot: no SYSTEM_ALERT_WINDOW`。
+
+验证：
+
+```sh
+adb shell dumpsys package io.github.ariinyume.fkuxmtv | grep -i BOOT_COMPLETED
+adb shell dumpsys activity io.github.ariinyume.fkuxmtv | grep BootStart
+adb reboot
+```
+
+`dumpsys` 里 `BootStart:` 行现在多一个 `overlay=true/false`（app-op 是否放行），`status` 会写
+「已由系统开机广播进入桌面」或「后台启动被系统拒绝（…）」。手动 `am broadcast -n …/.BootReceiver -a android.intent.action.BOOT_COMPLETED`
+只在该次开机还没进过桌面时有效，否则会被「本次开机已尝试」拦下——要复验就真重启。
 
 ## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
 
@@ -173,5 +216,7 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 本分支签名与上游官方 APK 不同，不能覆盖安装原版，也不能被原版覆盖。
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
 - **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
-- 开机自动进入依赖 `start_3rd_app`（ADB 一次性配置）。固件升级后该接口可能变化，升级后请重新确认。
+- 开机自动进入有两条路：`BOOT_COMPLETED`（需 `SYSTEM_ALERT_WINDOW` app-op，否则被后台启动限制拦下）与 `start_3rd_app` 兜底。固件升级后两者都可能变化，升级后请重新确认。
+- 方案 A（`BOOT_COMPLETED`）本身尚未在真机复验；`start_3rd_app` 路径此前已在 MiTV-MFTR0 上验证两次。
+- 运行中按遥控器 Home 键仍会回小米原桌面：`com.mitv.tvhome.permission.HOME_STATE` 由固件持有，无 root 改不了；`cmd package set-home-activity` 在该固件报 Success 但不生效。
 - HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；L55M9-S 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
