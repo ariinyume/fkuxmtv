@@ -4,12 +4,12 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class WakePolicyTest {
-    /** supported, enabled, interactive, handled, sinceWake, usageReadable, foreground, selfVisible, sinceHandled */
+    /** supported, enabled, interactive, handled, sinceWake, readable, foreground, selfVisible, sinceHandled */
     private static String check(boolean supported, boolean enabled, boolean interactive, boolean handled,
-                                long sinceWake, boolean usageReadable, String foreground,
+                                long sinceWake, boolean readable, String foreground,
                                 boolean selfVisible, long sinceHandled) {
         return WakePolicy.skipReason(supported, enabled, interactive, handled, sinceWake,
-                usageReadable, foreground, selfVisible, sinceHandled);
+                readable, foreground, selfVisible, sinceHandled);
     }
 
     @Test public void stockHomeOnWakeIsPulledUp() {
@@ -52,6 +52,12 @@ public class WakePolicyTest {
     @Test public void lateWakeUpIsSkipped() {
         assertNull(check(true, true, true, false, WakePolicy.WINDOW_MS, true, "com.mitv.tvhome", false, 60_000));
         assertNotNull(check(true, true, true, false, WakePolicy.WINDOW_MS + 1, true, "com.mitv.tvhome", false, 60_000));
+    }
+
+    @Test public void wakeUpNotCapturedFailsClosed() {
+        // No SCREEN_ON was seen (service bound late, or a plain home press long after wake-up).
+        assertNotNull(check(true, true, true, false, -1, true, "com.mitv.tvhome", false, 60_000));
+        assertFalse(WakePolicy.retryable(check(true, true, true, false, -1, true, "com.mitv.tvhome", false, 60_000)));
     }
 
     @Test public void debounceStopsDoublePull() {

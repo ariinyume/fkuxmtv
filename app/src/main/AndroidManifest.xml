@@ -1,15 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Wake handling: usage access to read the foreground app, foreground service to keep the
-         screen-on listener alive. Both are opt-in and never used unless the switch is on. -->
-    <!-- Granted through app-ops (usage access), not at install time. -->
+    <!-- Wake handling. This firmware refuses every third-party foreground service
+         (AppsRelaunchController: isCallerSystem=false), so the screen-on listener is an
+         accessibility service, which the system binds and keeps alive by itself.
+         Usage access is optional: it only powers the screen-on foreground probe.
+         Granted through app-ops, not at install time. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <queries>
@@ -18,6 +16,9 @@
         <package android:name="com.xiaomi.mitv.settings" />
         <package android:name="com.xiaomi.mitv.tvplayer" />
         <package android:name="com.mitv.tvhome" />
+        <package android:name="com.android.settings" />
+        <intent><action android:name="android.settings.ACCESSIBILITY_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.SETTINGS" /></intent>
     </queries>
     <application android:label="@string/app_name" android:icon="@drawable/ic_launcher"
         android:banner="@drawable/banner" android:theme="@style/Theme.GuiZangTV"
@@ -48,17 +49,16 @@
                 <category android:name="android.intent.category.INFO" />
             </intent-filter>
         </activity>
-        <!-- Keeps a screen-on receiver registered. Never starts by itself: only when the user
-             turns the switch on (or after a boot with the switch already on). -->
-        <service android:name=".WakeService" android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps a screen-on listener for the optional wake-up home entry" />
-        </service>
-        <receiver android:name=".WakeBootReceiver" android:exported="true">
+        <!-- Not running unless the user enables it in system accessibility settings, and it
+             does nothing while the in-app switch is off. Reads package names only. -->
+        <service android:name=".WakeAccessibilityService" android:exported="true"
+            android:label="@string/accessibility_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
-        </receiver>
+            <meta-data android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
     </application>
 </manifest>

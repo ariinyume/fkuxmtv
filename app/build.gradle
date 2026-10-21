@@ -7,8 +7,8 @@ android {
         applicationId 'io.github.ariinyume.fkuxmtv'
         minSdk 26
         targetSdk 34
-        versionCode 8
-        versionName '0.4.0-fkuxmtv.3'
+        versionCode 9
+        versionName '0.4.0-fkuxmtv.4'
     }
     signingConfigs {
         release {

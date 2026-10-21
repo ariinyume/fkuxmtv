@@ -11,17 +11,18 @@
 | 默认次项 | Apple TV → HDMI 1 | Apple TV → HDMI 2（避免与 Switch 2 抢端口） |
 | 首项图标 | PlayStation 标志 | Nintendo Switch 标志（`mark_nintendo_switch.xml`，Simple Icons CC0） |
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
-| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.3` / code 8 |
+| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.4` / code 9 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
 | 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L55M9*` 等），含目标机 **L55M9-S**；HDMI 直达不再硬性依赖机型名 |
-| 唤醒进入 | 无 | 亮屏时若前台是小米原桌面，拉起本桌面一次（默认关闭，见下） |
+| 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭，见下） |
 
 改动文件：
 
 - `app/build.gradle`：`namespace` / `applicationId` / `versionCode` / `versionName`
 - `app/src/main/java/io/github/ariinyume/fkuxmtv/*`：源码目录与 `package` 声明整体迁移
 - `HomeItems.java`：`DEFAULTS` 顺序与默认名称
-- `WakeHome.java` / `WakeService.java` / `WakePolicy.java` / `WakeBootReceiver.java`：唤醒进入（新增）
+- `WakeHome.java` / `WakePolicy.java` / `WakeAccessibilityService.java`：唤醒进入（新增）
+- `res/xml/accessibility_service_config.xml`：只接收窗口切换事件，不读窗口内容
 - `HomeIcons.java`：`hdmi:1` → Switch 图标，`hdmi:2` → Apple TV 图标
 - `res/values/styles.xml`：`app_name`
 - `assets/icons/nintendoswitch.svg` + `SOURCES.json`、`res/drawable/mark_nintendo_switch.xml`：新增图标
@@ -56,35 +57,64 @@
 
 ```sh
 adb connect <电视IP>:5555
-adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.2.apk
+adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.4.apk
 ```
 
 与原版包名不同，可与原版共存；两者设置互不迁移，卸载任一方不影响另一方。
 
-## 唤醒后进入桌面（v0.4.0-fkuxmtv.3）
+## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
 
-设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**，开启后由一个前台服务常驻监听亮屏。
+设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**。
 
-放行条件（全部满足才拉一次，任何一条不满足都不动画面）：
+### 为什么是无障碍服务，而不是前台服务
 
-1. 开关处于开启状态；
+v0.4.0-fkuxmtv.3 用前台服务守 `ACTION_SCREEN_ON`，在 L55M9-S 上从未启动过一次。实机日志：
+
+```
+21:52:24.990 AppsRelaunchController: Refused to start foreground service:
+caller=io.github.ariinyume.fkuxmtv, isCallerSystem=false
+```
+
+被拒那一刻本应用**正在前台**（`TvMgr-Notifier` 报的 currentPkgName 就是本包），所以这不是"后台启动限制"，而是该固件对第三方前台服务的无差别封杀：判据只有 `isCallerSystem=false`。前台服务起不来 → `onCreate` 从未执行 → 动态广播从未注册 → "前台读不到"只是没触发，接口本身正常（同一时刻 `dumpsys usagestats` 里有秒级 `ACTIVITY_RESUMED` 事件，包名类名俱全）。
+
+v0.4.0-fkuxmtv.4 把监听搬进 `WakeAccessibilityService`：由系统绑定并保活，亮屏广播和窗口切换事件都收得到，拉起 Activity 也走系统服务通道。`WakeService` / `WakeBootReceiver` 以及 `FOREGROUND_SERVICE*`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED` 权限已整体移除。
+
+### 两路触发，同一道闸门
+
+1. `TYPE_WINDOW_STATE_CHANGED` 里出现 `com.mitv.tvhome`（实时，主路径）；
+2. SCREEN_ON 后 1.5 秒用 `queryEvents` 探一次前台（兜底：个别固件亮屏不重发窗口事件）；只有"读不到"才补一次 1.1 秒后的重试。
+
+### 放行条件（全满足才拉一次，否则不动画面）
+
+1. 开关开启；
 2. 机型受支持（小米电视家族）；
-3. 屏幕仍是亮的，且距离本次 SCREEN_ON 不超过 8 秒；
-4. 本次唤醒尚未处理过（一次唤醒只拉一次，SCREEN_OFF 才重置）；
+3. 屏幕仍亮，且距本次 SCREEN_ON ≤ 8 秒；
+4. 本次唤醒还没处理过（`SCREEN_OFF` 才重置）；
 5. 能读到前台应用（读不到就一律不动，不猜）；
-6. 前台包名严格等于 `com.mitv.tvhome`（小米原桌面）；
-7. 本桌面当时不在前台；
-8. 距上次拉起超过 4 秒（防抖）。
+6. 前台包名严格等于 `com.mitv.tvhome`；
+7. 本桌面不在前台；
+8. 距上次拉起 > 4 秒（防抖）。
 
-因此：唤醒直接进 HDMI、在爱奇艺/B 站里睡着、游戏中途亮屏，前台都不是小米桌面，一律不抢画面。判断在亮屏后约 1.5 秒做一次；只有"前台未知"才会再补一次 1.1 秒后的重试，一旦拿到明确答案就结束本次唤醒。
+没有捕捉到 SCREEN_ON（服务晚于亮屏才绑定）时 `sinceWake = -1`，直接判否——所以亮屏 8 秒后你再按 Home 也不会被抢。
 
-前提权限：**使用情况访问**（`PACKAGE_USAGE_STATS`）。系统设置里没有这一项时，用 adb：
+### 开启方式
+
+系统 设置 → 无障碍 → 已下载的服务 → 「大米电视 · 唤醒进入」→ 开启 → 允许。
+
+系统里没有这一页时用 adb：
+
+```sh
+adb shell settings put secure enabled_accessibility_services io.github.ariinyume.fkuxmtv/io.github.ariinyume.fkuxmtv.WakeAccessibilityService
+adb shell settings put secure accessibility_enabled 1
+```
+
+使用情况访问（`PACKAGE_USAGE_STATS`）现在是**可选**，只影响第 2 路探测：
 
 ```sh
 adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 ```
 
-被 HyperOS 后台拉起限制拦下时，会记录"系统拦截，未拉起"，可在设置里授予悬浮窗权限再试。诊断信息在 `adb shell dumpsys activity io.github.ariinyume.fkuxmtv` 的 `Wake:` 行。
+诊断：`adb shell dumpsys activity io.github.ariinyume.fkuxmtv | grep Wake:` 输出 `enabled / a11y / connected / usage / visible / result / note / foreground`；每次被跳过都写明原因。
 
 ## 仓库与分发边界
 
