@@ -14,7 +14,7 @@
 | 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.4` / code 9 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
 | 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L55M9*` 等），含目标机 **L55M9-S**；HDMI 直达不再硬性依赖机型名 |
-| 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭，见下） |
+| 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭；**本机实测不可用**，见下） |
 
 改动文件：
 
@@ -63,6 +63,8 @@ adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.4.apk
 与原版包名不同，可与原版共存；两者设置互不迁移，卸载任一方不影响另一方。
 
 ## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
+
+> **L55M9-S 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
 
 设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**。
 
@@ -116,6 +118,45 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 
 诊断：`adb shell dumpsys activity io.github.ariinyume.fkuxmtv | grep Wake:` 输出 `enabled / a11y / connected / usage / visible / result / note / foreground`；每次被跳过都写明原因。
 
+## 实机验证结果（2026-10-21）
+
+| 项 | 值 |
+| --- | --- |
+| 电视型号 | L55M9-S |
+| `Build.MODEL` | **MiTV-MFTR0** |
+| 固件 | **OS2.0.23.0.RFTMATV** |
+| Android | 11（API 30） |
+
+| 能力 | 结果 | 说明 |
+| --- | --- | --- |
+| 桌面本体 / 壁纸 / 首页入口 | ✅ | 安装后直接可用 |
+| 开机自动进入 | ✅ | 走完整开机链，`start_3rd_app` 生效，重启后仍正常 |
+| 息屏唤醒进入桌面 | ❌ | 链路断死，见下 |
+
+### 息屏唤醒：本固件不可能，结论定死
+
+```
+电源键息屏 → killAllThirdApp 屠杀（免杀名单形同虚设）
+          → 进程死 → a11y 服务被踢设置 + 打 crashed 标记
+          → 亮屏时无人监听 SCREEN_ON / 窗口事件
+          → 小米桌面接管，完事
+```
+
+实测覆盖了三条路：
+
+- 应用在前台按电源键 —— 杀；
+- 先退回小米桌面再按 —— 照样杀；
+- 想绕开电源键用空闲息屏 —— 这台固件的 `sleep_timeout` 是摆设，电源键是唯一的息屏路径。
+
+设计上是个死结：前台服务被固件封杀（`AppsRelaunchController: isCallerSystem=false`，见上节），`BOOT_COMPLETED` 只负责“武装”不负责“监听屏幕”，于是无障碍服务成了唯一入口——而入口每息屏一次就被拆一次。入口被拆，代码侧无解。
+
+两个“不算息屏”的例外：
+
+1. **直接断电 / 关机再开机**：走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效——但这是重启，不是息屏唤醒。
+2. **固件升级后 MIUI 改了 `killAllThirdApp` 策略**：未来的事，未发生。
+
+结论：**这台电视上，息屏唤醒 = 回小米桌面，属于固件层面的硬约束。** 真要打破只有一条路——root 后 patch `MitvActivityManagerService`。为唤醒功能给电视 root 刷机，值不值自己掂量，本分支不做。
+
 ## 仓库与分发边界
 
 - 本仓库**只存放代码**。自选壁纸（`assets/wallpapers/local/`）与构建产物（APK）**不进仓库、不发 GitHub Release**：这些照片没有公开再分发授权，仓库又是上游的公开 fork，无法转私有。
@@ -128,3 +169,6 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 已在真机 `MiTV-MTSU0` 验证；L55M9-S 尚未实机验证（无设备），首次安装请先确认 HDMI 按钮行为。
 - 本分支签名与上游官方 APK 不同，不能覆盖安装原版，也不能被原版覆盖。
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
+- **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
+- 开机自动进入依赖 `start_3rd_app`（ADB 一次性配置）。固件升级后该接口可能变化，升级后请重新确认。
+- HDMI 端口映射（`input=23` / `24`）沿用 MiTV-MTSU0 的实测值，L55M9-S 上未单独做端口核验。
