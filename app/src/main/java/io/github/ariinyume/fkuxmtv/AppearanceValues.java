@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 /** Shared validation for old/corrupt preferences, independent of Android. */
 final class AppearanceValues {

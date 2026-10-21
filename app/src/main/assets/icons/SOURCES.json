@@ -58,5 +58,10 @@
     "name": "bilibili",
     "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/icons/bilibili.svg",
     "license": "CC0-1.0"
+  },
+  {
+    "name": "nintendoswitch",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/icons/nintendoswitch.svg",
+    "license": "CC0-1.0"
   }
 ]

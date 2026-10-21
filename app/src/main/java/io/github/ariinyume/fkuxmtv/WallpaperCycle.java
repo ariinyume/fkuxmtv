@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 /** Shared bounds for persisted wallpaper selections and slideshow intervals. */
 final class WallpaperCycle {

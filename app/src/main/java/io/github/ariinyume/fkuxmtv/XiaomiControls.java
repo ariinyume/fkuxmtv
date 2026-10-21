@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -7,18 +7,22 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.provider.Settings;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
-/** Local profile verified on MiTV-MTSU0, OS3.0.119.0.UTSMATV. */
+/** Verified on MiTV-MTSU0, OS3.0.119.0.UTSMATV; personal build also targets L55M9-S (小米电视 S 55), HDMI mapping unverified there. */
 final class XiaomiControls {
+    private static final Pattern XIAOMI_TV = Pattern.compile("^(MITV|L\\d{2}M\\d).*");
     private XiaomiControls() { }
 
     static boolean enabled() {
-        return "MiTV-MTSU0".equals(Build.MODEL);
+        String model = Build.MODEL == null ? "" : Build.MODEL.toUpperCase(Locale.ROOT);
+        return XIAOMI_TV.matcher(model).matches();
     }
 
-    /** Observed on this firmware: source 23 = HDMI 1, source 24 = HDMI 2. */
+    /** Observed on MiTV-MTSU0 firmware: source 23 = HDMI 1, source 24 = HDMI 2. */
     static boolean openHdmi(Context context, int port) {
-        if (!enabled() || port < 1 || port > 2) return false;
+        if (port < 1 || port > 2) return false;
         ComponentName target = new ComponentName("com.xiaomi.mitv.tvplayer",
                 "com.xiaomi.mitv.tvplayer.ExternalSourceActivity");
         try {
@@ -27,9 +31,16 @@ final class XiaomiControls {
             if (info.permission != null
                     && context.checkSelfPermission(info.permission) != PackageManager.PERMISSION_GRANTED)
                 return false;
-            context.startActivity(new Intent("com.xiaomi.mitv.tvplayer.EXTSRC_PLAY")
-                    .setComponent(target).putExtra("input", 22 + port)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            try {
+                context.startActivity(new Intent("com.xiaomi.mitv.tvplayer.EXTSRC_PLAY")
+                        .setComponent(target).putExtra("input", 22 + port)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (RuntimeException directRejected) {
+                // Unverified models may not accept the input extra: fall back to the source list.
+                android.util.Log.w("TvHome.Xiaomi", "Direct HDMI entry rejected, opening source list", directRejected);
+                context.startActivity(new Intent().setComponent(target)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
             return true;
         } catch (PackageManager.NameNotFoundException | RuntimeException unavailable) {
             android.util.Log.w("TvHome.Xiaomi", "HDMI entry unavailable", unavailable);

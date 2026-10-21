@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 /** Keep the selected tile fully within the fixed shelf without shrinking its icon. */
 final class DockScroll {

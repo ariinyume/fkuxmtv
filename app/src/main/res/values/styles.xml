@@ -5,5 +5,5 @@
         <item name="android:windowAnimationStyle">@null</item>
         <item name="android:fontFamily">sans-serif</item>
     </style>
-    <string name="app_name">归藏电视</string>
+    <string name="app_name">大米电视</string>
 </resources>

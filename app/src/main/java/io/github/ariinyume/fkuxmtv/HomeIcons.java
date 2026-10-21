@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
@@ -8,8 +8,8 @@ final class HomeIcons {
     static Drawable get(Context context,String id,int color){
         int resource;
         switch(id){
-            case "hdmi:2":resource=R.drawable.mark_playstation;break;
-            case "hdmi:1":resource=R.drawable.mark_appletv;break;
+            case "hdmi:1":resource=R.drawable.mark_nintendo_switch;break;
+            case "hdmi:2":resource=R.drawable.mark_appletv;break;
             case "com.xiaodianshi.tv.yst":resource=R.drawable.mark_bilibili;break;
             case "com.xiaomi.mitv.smartshare":resource=R.drawable.mark_broadcast;break;
             case "com.mitv.gallery":resource=R.drawable.mark_image;break;

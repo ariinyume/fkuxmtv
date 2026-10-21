@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class WeatherPolicyTest {

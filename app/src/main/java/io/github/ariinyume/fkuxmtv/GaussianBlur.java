@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 /** Separable Gaussian convolution. Small opaque material fields only; no UI-thread work. */
 final class GaussianBlur {

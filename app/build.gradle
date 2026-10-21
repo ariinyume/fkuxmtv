@@ -1,14 +1,14 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'io.github.op7418.guizangtv'
+    namespace 'io.github.ariinyume.fkuxmtv'
     compileSdk 34
     defaultConfig {
-        applicationId 'io.github.op7418.guizangtv'
+        applicationId 'io.github.ariinyume.fkuxmtv'
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName '0.4.0-dev'
+        versionCode 7
+        versionName '0.4.0-fkuxmtv.2'
     }
     signingConfigs {
         release {

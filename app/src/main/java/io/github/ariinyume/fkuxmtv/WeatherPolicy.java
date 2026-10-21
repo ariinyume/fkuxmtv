@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 
 /** Pure freshness/validation rules shared by network and cached weather. */
 final class WeatherPolicy {

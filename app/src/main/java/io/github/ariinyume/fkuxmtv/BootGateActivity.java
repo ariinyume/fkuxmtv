@@ -1,4 +1,4 @@
-package io.github.op7418.guizangtv;
+package io.github.ariinyume.fkuxmtv;
 import android.app.Activity;
 import android.os.Bundle;
 /** One-shot gate for the stock launcher's package-based startup hook. */

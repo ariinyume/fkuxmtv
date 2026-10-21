@@ -1,6 +1,8 @@
-# 归藏电视 · GuiZang TV
+# 归藏电视 · GuiZang TV（个人自用分支）
 
 一个给国内小米电视做的简洁桌面：大字、壁纸、常用应用，以及直接进入游戏机和 Apple TV 的入口。
+
+> **本仓库是 `op7418/guizang-tv` 的个人自用分支**，改动：包名 `io.github.ariinyume.fkuxmtv`、首项为 Switch 2 直达 HDMI 1、壁纸按「使用自己的壁纸」流程在构建时打包。详见 [FORK.md](FORK.md)。
 
 ![归藏电视界面示意](docs/preview.svg)
 
@@ -54,7 +56,7 @@ adb install -r guizang-tv-v0.3.0.apk
 
 **建议先作为普通应用试用。** 已测试的 HyperOS 固件会忽略第三方默认桌面选择，因此本项目不接管 Home 键。可在已适配机型上配置开机自动进入，需开启应用内开关并设置系统目标；这与默认桌面选择是两回事。无需禁用原桌面，小爱同学、手机投屏、直播及 HDMI 系统组件均保留。真实语音、投屏、直播播放仍需自行验证。
 
-未配置开机自动进入时，卸载「归藏电视」即可结束试用。已经配置的用户先按 [关闭与恢复步骤](docs/BOOT-START.md) 停用并核对系统目标，避免缓存调用或降级旧版后行为变化。公开版包名为 `io.github.op7418.guizangtv`，不会覆盖上游 cleanYourTV，也不会覆盖原有私人试用版，设置不会自动迁移。
+未配置开机自动进入时，卸载「归藏电视」即可结束试用。已经配置的用户先按 [关闭与恢复步骤](docs/BOOT-START.md) 停用并核对系统目标，避免缓存调用或降级旧版后行为变化。公开版包名为 `io.github.ariinyume.fkuxmtv`，不会覆盖上游 cleanYourTV，也不会覆盖原有私人试用版，设置不会自动迁移。
 
 ## 从源码构建
 
@@ -103,9 +105,9 @@ gradle :app:assembleDebug
 
 ## 修改入口与适配电视
 
-- 首页可在「设置 → 首页内容」编辑。默认名称、包名和顺序位于 [HomeItems.java](app/src/main/java/io/github/op7418/guizangtv/HomeItems.java)，应用启动由 FrameHomeActivity 处理。
-- 小米接口集中在 [XiaomiControls.java](app/src/main/java/io/github/op7418/guizangtv/XiaomiControls.java)。HDMI 参数只在已验证机型上启用，不能仅添加机型名就视为完成适配。
-- 分组设置位于 HomeSettings，首页及预览共用 HomeSurface；壁纸加载与轮播逻辑在 [FrameWallpapers.java](app/src/main/java/io/github/op7418/guizangtv/FrameWallpapers.java)。
+- 首页可在「设置 → 首页内容」编辑。默认名称、包名和顺序位于 [HomeItems.java](app/src/main/java/io/github/ariinyume/fkuxmtv/HomeItems.java)，应用启动由 FrameHomeActivity 处理。
+- 小米接口集中在 [XiaomiControls.java](app/src/main/java/io/github/ariinyume/fkuxmtv/XiaomiControls.java)。HDMI 参数只在已验证机型上启用，不能仅添加机型名就视为完成适配。
+- 分组设置位于 HomeSettings，首页及预览共用 HomeSurface；壁纸加载与轮播逻辑在 [FrameWallpapers.java](app/src/main/java/io/github/ariinyume/fkuxmtv/FrameWallpapers.java)。
 - 当前 PS5 / Apple TV 是入口名称，不代表自动识别到设备。请按实际接线修改端口。
 - 应用未安装时会显示提示；项目没有代装应用、账号登录或内容破解功能。
 
