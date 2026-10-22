@@ -10,7 +10,7 @@ import android.provider.Settings;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-/** Verified on MiTV-MTSU0, OS3.0.119.0.UTSMATV; personal build also targets L55M9-S (小米电视 S 55), HDMI mapping unverified there. */
+/** Verified on MiTV-MTSU0 (OS3.0.119.0.UTSMATV) and on MiTV-MFTR0 (小米电视 S 55, OS2.0.23.0.RFTMATV), where HDMI 1 is confirmed. */
 final class XiaomiControls {
     private static final Pattern XIAOMI_TV = Pattern.compile("^(MITV|L\\d{2}M\\d).*");
     private XiaomiControls() { }

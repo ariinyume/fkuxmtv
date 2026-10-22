@@ -13,7 +13,7 @@
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
 | 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.5` / code 10 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
-| 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L55M9*` 等），含目标机 **L55M9-S**；HDMI 直达不再硬性依赖机型名 |
+| 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L\d{2}M\d` 等），含目标机 **MiTV-MFTR0**；HDMI 直达不再硬性依赖机型名 |
 | 开机进入 | 无（依赖小米 `start_3rd_app`） | 吃系统 `BOOT_COMPLETED`，`SYSTEM_ALERT_WINDOW` 作后台启动豁免；`start_3rd_app` 保留兜底 |
 | 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭；**本机实测不可用**，见下） |
 
@@ -168,7 +168,7 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 
 | 项 | 值 |
 | --- | --- |
-| 电视型号 | L55M9-S |
+| 电视型号 | 小米电视 S 55 |
 | `Build.MODEL` | **MiTV-MFTR0** |
 | 固件 | **OS2.0.23.0.RFTMATV** |
 | Android | 11（API 30） |
@@ -294,4 +294,4 @@ FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME`
 - 开机自动进入有两条路：`BOOT_COMPLETED`（需 `SYSTEM_ALERT_WINDOW` app-op，否则被后台启动限制拦下）与 `start_3rd_app` 兜底。固件升级后两者都可能变化，升级后请重新确认。
 - 方案 A（`BOOT_COMPLETED`）已在 MiTV-MFTR0 上实测：广播送达晚于小米私有广播，**未构成实际进场路径**（详见「开机自启实测」）；`start_3rd_app` 仍是唯一有效路径。
 - 运行中按遥控器 Home 键仍会回小米原桌面：`com.mitv.tvhome.permission.HOME_STATE` 由固件持有，无 root 改不了；`cmd package set-home-activity` 在该固件报 Success 但不生效。
-- HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；L55M9-S 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
+- HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；MiTV-MFTR0 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
