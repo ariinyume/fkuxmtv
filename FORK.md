@@ -2,6 +2,12 @@
 
 基于 [op7418/guizang-tv](https://github.com/op7418/guizang-tv) 的个人自用改动，代码仍为 MIT 许可，上游署名与壁纸许可文件原样保留。
 
+## 测试设备号
+
+小米电视S55 2023 / L55M9-S / MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11
+
+注意：MiTV-MFTR0 关联的设备不止一种。
+
 ## 相对上游的改动
 
 | 项目 | 上游 | 本分支 |
@@ -13,7 +19,7 @@
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
 | 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.5` / code 10 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
-| 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L\d{2}M\d` 等），含目标机 **MiTV-MFTR0**；HDMI 直达不再硬性依赖机型名 |
+| 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L\d{2}M\d` 等），含目标机 **L55M9-S / MiTV-MFTR0**；HDMI 直达不再硬性依赖机型名 |
 | 开机进入 | 无（依赖小米 `start_3rd_app`） | 吃系统 `BOOT_COMPLETED`，`SYSTEM_ALERT_WINDOW` 作后台启动豁免；`start_3rd_app` 保留兜底 |
 | 唤醒进入 | 无 | 亮屏后 8 秒内若停在小米原桌面，拉起本桌面一次（无障碍服务驱动，默认关闭；**本机实测不可用**，见下） |
 
@@ -110,13 +116,13 @@ adb reboot
 
 ## 唤醒后进入桌面（v0.4.0-fkuxmtv.4）
 
-> **MiTV-MFTR0 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启——本机系统连无障碍设置页都没有，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
+> **L55M9-S / MiTV-MFTR0 实测结论：本机不可用。** 电源键息屏会执行 `killAllThirdApp` 杀掉进程，并把无障碍授权从设置里踢掉（带 crashed 标记），服务根本没有机会监听亮屏。实现保留给未封杀的固件，本机不建议开启——本机系统连无障碍设置页都没有，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”。完整链路见下文「[实机验证结果](#实机验证结果2026-10-21)」。
 
 设置 → 电视与启动 → 唤醒后进入桌面。默认**关闭**。
 
 ### 为什么是无障碍服务，而不是前台服务
 
-v0.4.0-fkuxmtv.3 用前台服务守 `ACTION_SCREEN_ON`，在 MiTV-MFTR0 上从未启动过一次。实机日志：
+v0.4.0-fkuxmtv.3 用前台服务守 `ACTION_SCREEN_ON`，在 L55M9-S / MiTV-MFTR0 上从未启动过一次。实机日志：
 
 ```
 21:52:24.990 AppsRelaunchController: Refused to start foreground service:
@@ -169,7 +175,7 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 | 项 | 值 |
 | --- | --- |
 | 电视型号 | 小米电视 S 55 |
-| `Build.MODEL` | **MiTV-MFTR0** |
+| `Build.MODEL` | **L55M9-S / MiTV-MFTR0** |
 | 固件 | **OS2.0.23.0.RFTMATV** |
 | Android | 11（API 30） |
 
@@ -286,12 +292,12 @@ FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME`
 
 ## 已知限制
 
-- HDMI 端口号（23 = HDMI 1、24 = HDMI 2）是在原仓库 `MiTV-MTSU0` 固件上实测得到的。MiTV-MFTR0 上沿用同一套小米 `com.xiaomi.mitv.tvplayer` 组件；若该固件不接受 `input` 参数，会退回信号源列表让你手选，不会闪退。
-- 已在真机 `MiTV-MFTR0` 验证，首次安装请先确认 HDMI 按钮行为。
+- HDMI 端口号（23 = HDMI 1、24 = HDMI 2）是在原仓库 `MiTV-MTSU0` 固件上实测得到的。L55M9-S / MiTV-MFTR0 上沿用同一套小米 `com.xiaomi.mitv.tvplayer` 组件；若该固件不接受 `input` 参数，会退回信号源列表让你手选，不会闪退。
+- 已在真机 `L55M9-S / MiTV-MFTR0` 验证，首次安装请先确认 HDMI 按钮行为。
 - 本分支签名与上游官方 APK 不同，不能覆盖安装原版，也不能被原版覆盖。
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
-- **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
+- **息屏唤醒在本机（L55M9-S / MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
 - 开机自动进入有两条路：`BOOT_COMPLETED`（需 `SYSTEM_ALERT_WINDOW` app-op，否则被后台启动限制拦下）与 `start_3rd_app` 兜底。固件升级后两者都可能变化，升级后请重新确认。
-- 方案 A（`BOOT_COMPLETED`）已在 MiTV-MFTR0 上实测：广播送达晚于小米私有广播，**未构成实际进场路径**（详见「开机自启实测」）；`start_3rd_app` 仍是唯一有效路径。
+- 方案 A（`BOOT_COMPLETED`）已在 L55M9-S / MiTV-MFTR0 上实测：广播送达晚于小米私有广播，**未构成实际进场路径**（详见「开机自启实测」）；`start_3rd_app` 仍是唯一有效路径。
 - 运行中按遥控器 Home 键仍会回小米原桌面：`com.mitv.tvhome.permission.HOME_STATE` 由固件持有，无 root 改不了；`cmd package set-home-activity` 在该固件报 Success 但不生效。
-- HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；MiTV-MFTR0 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
+- HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；L55M9-S / MiTV-MFTR0 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。
