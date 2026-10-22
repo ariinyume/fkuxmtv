@@ -69,7 +69,10 @@ adb shell appops set io.github.ariinyume.fkuxmtv SYSTEM_ALERT_WINDOW allow
 
 ## 开机自动进入（方案 A：系统开机广播）
 
-v0.4.0-fkuxmtv.5 起，开机进入不再依赖小米的 `start_3rd_app`，直接吃系统的 `BOOT_COMPLETED`。
+v0.4.0-fkuxmtv.5 加了系统 `BOOT_COMPLETED` 这条路，设计上是让开机进入不再依赖小米的 `start_3rd_app`。
+
+> **实测结论（MiTV-MFTR0）：标准广播抢不过小米私有广播，实际进场仍由 `start_3rd_app` 完成。**
+> 这条路径当兜底保留，别当主力——证据见下文「[开机自启实测（2026-10-22）](#开机自启实测2026-10-22)」。
 
 | 环节 | 实现 |
 | --- | --- |
@@ -174,8 +177,11 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 | --- | --- | --- |
 | 桌面本体 / 壁纸 / 首页入口 | ✅ | 安装后直接可用 |
 | Switch 2 → HDMI 1 直达 | ✅ | 实机点按可直达（`com.xiaomi.mitv.tvplayer` + `input=23`） |
-| 开机自动进入 | ✅ | 走完整开机链，`start_3rd_app` 生效，重启后仍正常 |
+| 开机自动进入（`start_3rd_app` 老路径） | ✅ | 真重启后前台即 `FrameHomeActivity`，进程在开机约 30 秒时被拉起 |
+| 开机自动进入（`BOOT_COMPLETED`，v0.5 方案 A） | ❌ | 广播送达晚于小米私有广播，当次进场由老路径完成，见下 |
+| 短按遥控器电源键唤醒 / 开关机 | ❌ | 与 `adb reboot` 不是一条链路，广播不重发，调不起本桌面 |
 | 息屏唤醒进入桌面 | ❌ | 链路断死，见下 |
+| HOME 键接管（cleanyourtv 方案） | ❌ | 澎湃 2 上四道锁全破不了；强禁 tvhome 会黑屏，见附录 |
 
 ### 息屏唤醒：本固件不可能，结论定死
 
@@ -192,6 +198,8 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 先退回小米桌面再按 —— 照样杀；
 - 想绕开电源键用空闲息屏 —— 这台固件的 `sleep_timeout` 是摆设，电源键是唯一的息屏路径。
 
+**短按遥控器电源键 ≠ `adb reboot`**：那是待机/唤醒（`killAllThirdApp` + 息屏），广播不会重发，本桌面也不会被拉起——按一下电源键回不到大米电视，只能从应用列表手动打开，或者真的断电冷启动。
+
 还有一个更直接的死结：**本机系统里没有无障碍设置页**，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”，所以连手动开启的入口都不存在（只能靠 adb 写 `settings put secure`，而写了也会被下次息屏撤销）。也就是说这个开关在本机型上是纯粹的摆设。
 
 设计上是个死结：前台服务被固件封杀（`AppsRelaunchController: isCallerSystem=false`，见上节），`BOOT_COMPLETED` 只负责“武装”不负责“监听屏幕”，于是无障碍服务成了唯一入口——而入口每息屏一次就被拆一次。入口被拆，代码侧无解。
@@ -202,6 +210,73 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 2. **固件升级后 MIUI 改了 `killAllThirdApp` 策略**：未来的事，未发生——毕竟这台电视已经停在澎湃2.0.23.0（笑
 
 结论：**这台电视上，息屏唤醒 = 回小米桌面，属于固件层面的硬约束。** 真要打破只有一条路——root 后 patch `MitvActivityManagerService`。为唤醒功能给电视 root 刷机，值不值自己掂量，本分支不做。
+
+## 开机自启实测（2026-10-22）
+
+真重启（不是重连）后的取证。此前有一次「看起来失败」，其实是 `adb reboot` 落空：stderr 是
+`error: device not found`，`/proc/uptime` 显示 4061 秒——电视压根没重启。**验收前先看 uptime。**
+
+| 时刻 | 事件 |
+| --- | --- |
+| 01:20:45 | `adb reboot` 发出；01:21:11 重新连上，uptime 22 秒 |
+| 01:21:06 | 系统 `BOOT_COMPLETED` 入队 |
+| 01:21:07 | 开始分发，**41 个接收器串行跑了 18.5 秒** |
+| 01:21:22 | 小米私有广播 `mitv.action.STR_BOOT_COMPLETED` 拉起 `BootGateActivity` |
+| 01:22 前后 | 前台 `fkuxmtv/.FrameHomeActivity`，进程存活 1 分 24 秒（开机约 30 秒时被拉起） |
+
+要分两件事说：
+
+- **开机自启本身 ✅ 可用**：真重启后前台就是本桌面；`appops SYSTEM_ALERT_WINDOW` 熬过重启仍是 `allow`；长辈模式 `user_mode=2` 没丢。
+- **`BOOT_COMPLETED` 这条路 ❌ 没生效**：当次进场由老路径完成（`start_3rd_app` → `BootGateActivity`，`am start` 调用方 uid 1000，即 tvhome 以系统身份发起）。`Start proc` 日志显示进程是为 `BootGateActivity` 起的，不是为广播起的——**接收器没抢到先机**。原因不是权限（appops 已放行），是分发顺序：标准广播要串行跑完 41 个接收器，小米私有广播早约 16 秒先把桌面拉起来了。
+- 两道保险按设计工作：老路径先写 `attempted`，接收器即便送达也判「本次开机已尝试」，没有二次抢画面。这不是 bug，是当初刻意加的闸门。
+
+结论：本机**开机自启靠的是 `start_3rd_app`**。v0.5 的 `BootReceiver` 留着当兜底（换机器、换固件后顺序可能反过来），但别指望它在小米国行固件上抢先。
+
+## 附：HOME 接管（cleanyourtv 研究 + 本机实测）
+
+背景研究，供他人参考：
+
+- 《cleanyourtv_HOME接管机制研究》 https://www.workbuddy.cn/space/d/jBCrx54mh7R3tYhnvGqUp7
+- 《fkuxmtv_开机自启改造包（方案 A）》 https://www.workbuddy.cn/space/d/dhfFkqXYcO2xxDDtyO6gWa
+
+### cleanyourtv 的手法（值得抄的部分）
+
+没有黑科技，靠时序五步：识别原版桌面（白名单含 `com.mitv.tvhome`）→ 装新 launcher →
+`am start -W` 先验证新桌面起得来 → `pm disable-user com.mitv.tvhome` →
+`cmd package set-home-activity`（传完整组件名）→ `resolve-activity` 复核，失败就回滚。
+脚本注释原话：*Android drops the preference whenever the set of HOME apps changes*——候选集合一变，
+系统存的默认桌面记录就被丢弃。所以**先夺嫡（禁原版），再登基（设默认）**，顺序就是灵魂。
+
+### 本机实测：四道锁，无 root 全破不了
+
+| 手法 | 结果 |
+| --- | --- |
+| `pm disable-user --user 0 com.mitv.tvhome` | ✅ 成功 |
+| `cmd package set-home-activity --user 0 …/.FrameHomeActivity` | ❌ 报 Success 但不生效，`resolve-activity` 仍返回 `com.xiaomi.mitv.settings/.entry.FallbackHome` |
+| `pm disable` 掉 `com.xiaomi.mitv.settings/.entry.FallbackHome` | ❌ `SecurityException: Shell cannot change component state`（组件受保护） |
+| `android.settings.HOME_SETTINGS` → 角色选择器里选「大米电视」 | ✅ 打开的是 `com.android.permissioncontroller/.role.ui.DefaultAppActivity`，操作后 `ROLE_HOME` 确实写成 `io.github.ariinyume.fkuxmtv` |
+| 按 HOME 键 | ❌ 仍被 MIUI 硬编码到 `FallbackHome`，`ROLE_HOME` 形同虚设 |
+
+几条硬证据：
+
+- `Preferred Activities User 0` 里存着 `com.xiaomi.mitv.settings/.entry.FallbackHome`，`mAlways=true`（永久首选），`Selected from` 能看到本桌面曾是候选。
+- `set-home-activity` 是个**半残的清障车**：它能抹掉那枚 `mAlways` 记录（执行后该段消失），但死活不写新记录——清完 `resolve` 依然返回 FallbackHome。
+- 解析器也被打过补丁：本桌面 `priority=0`，FallbackHome `priority=-1000`，没有首选记录时系统**仍**选 FallbackHome。
+- 遥控器 HOME 发的是标准 `KEYCODE_HOME`（不是研究文档里说的 `KEYCODE_ALL_APPS`）；30 秒捕获窗口内 7 次按压，每次都由 uid 0 直接 `am start` `FallbackHome`，`(has extras)` 说明是 MIUI 自己拼的 intent，绕过标准解析。
+- 行为还怪：奇数次按压 FallbackHome 进程死亡 → 前台落回本桌面；偶数次新进程拉起迷你启动器 → 赖在屏幕上不走。
+
+### ⚠️ 致命副作用：禁 tvhome 后短按电源键会黑屏
+
+`pm disable-user com.mitv.tvhome` 确实成功，ROLE_HOME 也拿到了，但**开机解析桌面时小米自己的
+FallbackHome 没接住，boot 流程断在半空**——短按电源键关机再开就是一块黑屏（屏幕停在设置页）。
+恢复只有一条：`pm enable --user 0 com.mitv.tvhome`，系统随即自拉 `com.mitv.tvhome/.BootActivity`，
+HOME 键回 tvhome，桌面恢复，`user_mode=2` 未丢。**没有物理恢复手段时不要禁 tvhome。**
+
+### 结论
+
+四道锁——框架层硬编码 FallbackHome、残缺的 `set-home-activity`、打过补丁的解析器、受保护的
+FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME` 能拿到（角色系统认本桌面），
+但 MIUI 的按键路径根本不问它。**对普通用户，开机自启就是最优解**；真要接管 HOME 得 root 后改框架。
 
 ## 仓库与分发边界
 
@@ -217,6 +292,6 @@ adb shell appops set io.github.ariinyume.fkuxmtv GET_USAGE_STATS allow
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
 - **息屏唤醒在本机（MiTV-MFTR0 / OS2.0.23.0.RFTMATV / Android 11）不可实现**：电源键息屏触发 `killAllThirdApp`，进程被杀且无障碍授权被系统撤销，亮屏后无人监听；仅能靠重启走开机自动进入。
 - 开机自动进入有两条路：`BOOT_COMPLETED`（需 `SYSTEM_ALERT_WINDOW` app-op，否则被后台启动限制拦下）与 `start_3rd_app` 兜底。固件升级后两者都可能变化，升级后请重新确认。
-- 方案 A（`BOOT_COMPLETED`）本身尚未在真机复验；`start_3rd_app` 路径此前已在 MiTV-MFTR0 上验证两次。
+- 方案 A（`BOOT_COMPLETED`）已在 MiTV-MFTR0 上实测：广播送达晚于小米私有广播，**未构成实际进场路径**（详见「开机自启实测」）；`start_3rd_app` 仍是唯一有效路径。
 - 运行中按遥控器 Home 键仍会回小米原桌面：`com.mitv.tvhome.permission.HOME_STATE` 由固件持有，无 root 改不了；`cmd package set-home-activity` 在该固件报 Success 但不生效。
 - HDMI 端口映射（`input=23` / `24`）与 `MiTV-MTSU0` 一致；L55M9-S 上 **Switch 2 → HDMI 1 已实测直达**。`hdmi:2`（Apple TV）未单独验证，接线不同请自行改端口。

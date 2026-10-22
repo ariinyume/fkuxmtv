@@ -66,9 +66,22 @@ adb install -r guizang-tv-v0.3.0.apk
 | --- | --- |
 | 桌面本体、壁纸、首页入口 | ✅ 安装即可用 |
 | Switch 2 → HDMI 1 直达 | ✅ 点按可直达（与 MiTV-MTSU0 同为 23 端口） |
-| 开机自动进入（`start_3rd_app`，走完整开机链） | ✅ 生效，重启后仍在 |
-| 开机自动进入（v0.5 系统 `BOOT_COMPLETED`） | ⏳ 待实机复验；需一次 `adb shell appops set … SYSTEM_ALERT_WINDOW allow` |
+| 开机自动进入（`start_3rd_app`，走完整开机链） | ✅ 实测可用：真重启后前台即本桌面，进程在开机约 30 秒被拉起 |
+| 开机自动进入（v0.5 系统 `BOOT_COMPLETED`，方案 A） | ❌ 未生效：广播送达晚于小米私有广播，当次进场由老路径完成 |
+| 短按遥控器电源键唤醒 / 开关机 | ❌ 与 `adb reboot` 不是一条链路，广播不重发，调不起本桌面 |
 | 息屏唤醒进入桌面（v0.4 无障碍方案） | ❌ 本固件上不可能，见下 |
+| HOME 键接管（cleanyourtv 方案） | ❌ 澎湃 2 上四道锁破不了；强禁 tvhome 会让开机黑屏 |
+
+**开机自启实测（2026-10-22，真重启）**：前台 `fkuxmtv/.FrameHomeActivity`，
+`SYSTEM_ALERT_WINDOW` 熬过重启仍是 `allow`，长辈模式 `user_mode=2` 没丢。但归因要说清：标准
+`BOOT_COMPLETED` 于 01:21:06 入队、01:21:07 开始分发，**41 个接收器串行跑了 18.5 秒**；小米私有广播
+`mitv.action.STR_BOOT_COMPLETED` 在 01:21:22 就把 `BootGateActivity` 拉了起来——当次进场走的是老路径，
+v0.5 的接收器没抢到先机（权限已放行，是顺序问题）。更早一次「失败」其实是 `adb reboot` 落空
+（`error: device not found`、uptime 4061 秒），电视根本没重启：**验收前先看 uptime**。
+
+HOME 键接管在这台电视上四道锁全破不了（框架层硬编码 `FallbackHome`、残缺的 `set-home-activity`、
+打过补丁的解析器、受保护组件），强禁 `com.mitv.tvhome` 会让短按电源键开机时黑屏——完整证据链、
+cleanyourtv 手法与两份研究文档见 `FORK.md` 的「开机自启实测」与「附：HOME 接管」。
 
 **为什么息屏唤醒在这台电视上做不到**：按电源键息屏时固件执行 `killAllThirdApp`，本应用进程被杀，无障碍服务被系统从设置里踢掉并打上 crashed 标记；再亮屏时已经没有人监听 `SCREEN_ON` 和窗口事件，画面直接由小米桌面接管。
 
@@ -85,7 +98,7 @@ adb install -r guizang-tv-v0.3.0.apk
 - 先退回小米桌面再按 —— 照样杀；
 - 改用空闲息屏（`sleep_timeout`）—— 本固件里是摆设，电源键是唯一的息屏路径。
 
-所以「息屏唤醒 = 回小米桌面」在这台电视上是固件层面的硬结论，不是配置问题，也不是改代码能绕过去的。唯一例外是**断电 / 关机再开机**：那走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效——但这是重启，不是息屏唤醒。真要打破只能 root 后 patch `MitvActivityManagerService`，为唤醒功能刷机不值得。
+所以「息屏唤醒 = 回小米桌面」在这台电视上是固件层面的硬结论，不是配置问题，也不是改代码能绕过去的。唯一例外是**断电 / 关机再开机**（含 `adb reboot`）：那走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效——但这是冷启动，不是息屏唤醒。注意**短按遥控器电源键不属于这一类**：它是待机/唤醒，广播不会重发，按一下回不到本桌面。真要打破只能 root 后 patch `MitvActivityManagerService`，为唤醒功能刷机不值得。
 
 还有个更直接的问题：本机系统里**没有无障碍设置页**，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”，手动开启的入口本身就不存在（只能靠 `adb shell settings put secure` 写，而写了也会被下次息屏撤销）。所以这个开关在 L55M9-S 上是纯粹的摆设，保留它只是给其他固件用；本机不建议开启，也不必再点。
 
