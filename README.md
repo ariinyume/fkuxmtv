@@ -177,6 +177,6 @@ gradle :app:assembleDebug
 
 界面方向参考 [nthnclrk/CleanFrame](https://github.com/nthnclrk/CleanFrame)：照片背景、大字纵向列表、克制的焦点高亮，以及分组设置、预览和确认应用的交互。Android 界面使用原生 Java 实现，没有移植 Tizen 运行代码或附带其照片。
 
-本分支的「桌面守护」与「被强杀后自动恢复」两套机制，思路来自 [pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT License，Copyright (c) 2026 pengchujin）——一个同样面向国产电视的 tvOS 风格桌面。它先于本项目跑通了这条链路：用空实现的 `NotificationListenerService` 当「被 force-stop 之后唯一还能拿到进程」的入口，再用 `WRITE_SECURE_SETTINGS` 把被删掉的无障碍授权写回去；桌面守护则是「原桌面回到前台 → 等一拍确认还在 → 拉到本桌面」。另外两个坑也是它踩出来的：`excludeFromRecents` / `clearTaskOnLaunch` 会让被 trim 的任务拉回时丢焦点；`ro.config.low_ram=true` 的机型系统会拒绝所有通知监听，需要 SyncAdapter 兜底（本机不适用，说明见 [FORK.md](FORK.md)）。本项目没有复制它的 Kotlin 源码，上述部分是针对本机固件用 Java 重写的；它的 `docs/devices/xiaomi-mitv-mftr0.md` 也是同型号最早的一份实测记录。
+本分支的「桌面守护」与「被强杀后自动恢复」两套机制思路来自 [pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)：它用空实现的 `NotificationListenerService` 当「被 force-stop 之后唯一还能拿到进程」的入口，再用 `WRITE_SECURE_SETTINGS` 把被删掉的无障碍授权写回去；桌面守护则是「原桌面回到前台 → 等一拍确认还在 → 拉到本桌面」。另外两个坑也是它踩出来的：`excludeFromRecents` / `clearTaskOnLaunch` 会让被 trim 的任务拉回时丢焦点；`ro.config.low_ram=true` 的机型系统会拒绝所有通知监听，需要 SyncAdapter 兜底（本机不适用，说明见 [FORK.md](FORK.md)）。本项目没有复制它的 Kotlin 源码，上述部分是针对本机固件用 Java 重写的。
 
 代码采用 MIT 许可，保留上游署名。详细来源见 [NOTICE.md](NOTICE.md)。
