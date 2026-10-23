@@ -90,7 +90,7 @@ public final class FrameHomeActivity extends Activity implements HomeSurface.Act
     @Override protected void onDestroy(){settings.close();weather.destroy();wallpapers.destroy();handler.removeCallbacksAndMessages(null);super.onDestroy();}
     @Override public void onBackPressed(){if(surface.controls.contains(getCurrentFocus()))surface.focusApp();else if(XiaomiControls.enabled())stockHome();else super.onBackPressed();}
     @Override public void dump(String prefix,java.io.FileDescriptor fd,java.io.PrintWriter out,String[] args){
-        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);WakeHome.dump(this,out);HomeGuard.dump(this,out);weather.dump(out);
+        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);WakeHome.dump(this,out);HomeGuard.dump(this,out);Revival.dump(this,out);weather.dump(out);
         out.println("HomeAppearance: "+appearance.prefs.getAll()+" items="+items.order+" settings="+settings.page());
     }
     void message(String value){Toast.makeText(this,value,Toast.LENGTH_LONG).show();}

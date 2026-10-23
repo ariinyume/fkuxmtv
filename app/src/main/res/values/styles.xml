@@ -8,4 +8,5 @@
     <string name="app_name">大米电视</string>
     <string name="accessibility_label">大米电视 · 唤醒与桌面守护</string>
     <string name="accessibility_description">只接收窗口切换事件里的包名，用来做两件事：亮屏后停在小米原桌面时把大米电视拉到前台一次；回到小米原桌面时切回大米电视。不读取任何界面内容。</string>
+    <string name="revival_label">大米电视 · 被强杀后恢复</string>
 </resources>

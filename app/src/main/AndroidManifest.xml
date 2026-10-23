@@ -35,7 +35,7 @@
         <intent><action android:name="android.settings.SETTINGS" /></intent>
         <intent><action android:name="android.settings.action.MANAGE_OVERLAY_PERMISSION" /></intent>
     </queries>
-    <application android:label="@string/app_name" android:icon="@drawable/ic_launcher"
+    <application android:name=".App" android:label="@string/app_name" android:icon="@drawable/ic_launcher"
         android:banner="@drawable/banner" android:theme="@style/Theme.GuiZangTV"
         android:allowBackup="false" android:supportsRtl="true">
         <!-- Deliberately NOT excludeFromRecents / clearTaskOnLaunch: when the task gets trimmed,
@@ -84,6 +84,17 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
+        </service>
+        <!-- The revival handle. Power-key standby force-stops us and Android strips the
+             accessibility grant; this approval survives that, and the system rebinds the listener
+             shortly after the process dies, which is the only chance a force-stopped app gets to
+             run again. It reads no notifications - no callback is overridden. -->
+        <service android:name=".RevivalListener" android:exported="true"
+            android:label="@string/revival_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

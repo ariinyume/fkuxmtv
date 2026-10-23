@@ -27,7 +27,7 @@
 - 壁纸支持固定选择、自动轮播，默认每 5 分钟切换；可选 1 / 5 / 15 / 30 分钟。
 - 淡入淡出切换壁纸，离开桌面后暂停计时，返回后重新计时。
 - 遥控器方向键操作，记住上次选中的入口和壁纸偏好。
-- 不需要账号或无障碍服务；不下载或预装视频 App。main 的可选天气需要联网权限，默认关闭；v0.3.0 正式版仍不联网。本分支的「桌面守护」默认开启，依赖无障碍服务（只读窗口切换事件的包名，不读界面内容）；可选的「唤醒后进入桌面」默认关闭。见 [实机验证](#实机验证与已知限制)。
+- 不需要账号或无障碍服务；不下载或预装视频 App。main 的可选天气需要联网权限，默认关闭；v0.3.0 正式版仍不联网。本分支的「桌面守护」默认开启，依赖无障碍服务（只读窗口切换事件的包名，不读界面内容）；可选的「唤醒后进入桌面」默认关闭。被系统强杀后会自动恢复（需要一次 adb 授权，且不读取任何通知）。见 [实机验证](#实机验证与已知限制)。
 - 支持实验性开机自动进入：默认关闭，适配机型需先完成一次 ADB 配置，详见 [启用与恢复说明](docs/BOOT-START.md)。
 
 公开版自带五张经过来源核对的 Unsplash 照片：雾中雪岭、雨林山路、热带绿叶、山间彩虹、流光花影。图片适用 [Unsplash License](https://unsplash.com/license)，代码适用 MIT；[完整来源与署名](docs/WALLPAPERS.md)随源码和 APK 保存。其余版权未确认的照片未纳入。也可以用自己的图片构建。
@@ -60,7 +60,8 @@ adb install -r guizang-tv-v0.3.0.apk
 
 ## 实机验证与已知限制
 
-测试设备：**MiTV-MFTR0**（`Build.MODEL`）/ 固件 **OS2.0.23.0.RFTMATV** / Android 11。
+测试设备：**小米电视 S55 2023 / L55M9-S**（`Build.MODEL` = `MiTV-MFTR0`）/ 固件 **OS2.0.23.0.RFTMATV** / Android 11。
+注意 `MiTV-MFTR0` 这个型号名对应的设备不止一种，下面的实测结论只对上面这台负责。
 
 | 能力 | 结果 |
 | --- | --- |
@@ -68,8 +69,9 @@ adb install -r guizang-tv-v0.3.0.apk
 | Switch 2 → HDMI 1 直达 | ✅ 点按可直达（与 MiTV-MTSU0 同为 23 端口） |
 | 开机自动进入（`start_3rd_app`，走完整开机链） | ✅ 实测可用：真重启后前台即本桌面，进程在开机约 30 秒被拉起 |
 | 开机自动进入（v0.5 系统 `BOOT_COMPLETED`，方案 A） | ❌ 未生效：广播送达晚于小米私有广播，当次进场由老路径完成 |
-| 短按遥控器电源键（真待机） | ❌ `killAllThirdApp` 强杀进程并撤销无障碍授权，90 秒内无自启 |
+| 短按遥控器电源键（真待机） | ⚠️ `killAllThirdApp` 强杀进程并删除无障碍授权；v0.9 起 199 毫秒内自动复活并写回授权 |
 | `KEYCODE_SLEEP` 熄屏后唤醒 | ✅ 进程存活、授权未被改写，唤醒回本桌面（2026-10-23 修正） |
+| 被强杀后自动恢复（v0.9） | ✅ 通知监听重绑 → `WRITE_SECURE_SETTINGS` 写回授权 → 守护重新接管（需两项 adb 授权） |
 | 桌面守护：回小米桌面即切回（v0.8） | ✅ 1.5 秒后接管；切 HDMI / 播放器不会被抢 |
 | HOME 键接管（cleanyourtv 方案） | ❌ 澎湃 2 上四道锁破不了；强禁 tvhome 会让开机黑屏 |
 
@@ -94,6 +96,8 @@ cleanyourtv 手法与两份研究文档见 `FORK.md` 的「开机自启实测」
 
 但用 `KEYCODE_SLEEP` 只熄屏时，进程和授权都还在：熄屏 30 秒、180 秒后进程仍存活、`enabled_accessibility_services` 未被改写，唤醒直接回到本桌面。所以「息屏唤醒 = 回小米桌面」不是固件硬结论，**真正的硬约束只有遥控器电源键这一条**。例外仍是**断电 / 关机再开机**（含 `adb reboot`）：走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效。
 
+v0.9 把这个缺口补上了（详见 `FORK.md` 的「被强杀后自动恢复」）：被强杀的应用收不到广播、跑不了定时任务，唯一能拿到进程的入口是**系统重新绑定通知监听**——这个授权在 force-stop 之后不会被删。借这次绑定用 `WRITE_SECURE_SETTINGS` 把无障碍授权写回去，守护随即复活。实测从被杀到授权写回 199 毫秒。代价是这两个权限只能靠 adb（重装后要重做），实现在 `Revival.java` / `RevivalListener.java`。
+
 **桌面守护（v0.8，默认开启）** 解决的是另一半：HOME 键被固件写死到 `com.mitv.tvhome`，`set-home-activity` 报 Success 却不生效，所以不去争「默认桌面」这个身份，改成「小米桌面一出现在前台就盖掉」。判定条件全在 `HomeGuardPolicy` 里：前台必须是 `com.mitv.tvhome`、屏幕亮着、自己不在前台、两次接管间隔 ≥ 4 秒、1 分钟最多 3 次；事件到达后先等 1.5 秒再确认一次才动手。主动去小米桌面（按返回键或点「小米原桌面」磁贴）会获得 5 分钟安静期，一离开小米桌面立即解除。
 
 本机系统里**没有无障碍设置页**，应用内「无障碍设置」按钮只会提示“系统没有无障碍设置页”，开启只能靠 adb：
@@ -101,6 +105,13 @@ cleanyourtv 手法与两份研究文档见 `FORK.md` 的「开机自启实测」
 ```bash
 adb shell settings put secure enabled_accessibility_services "<原值>:io.github.ariinyume.fkuxmtv/io.github.ariinyume.fkuxmtv.WakeAccessibilityService"
 adb shell settings put secure accessibility_enabled 1
+```
+
+v0.9 起上述写入可以由应用自己完成，但需要两项一次性的 adb 授权（`FORK.md` 的「安装」一节有完整命令）：
+
+```bash
+adb shell pm grant io.github.ariinyume.fkuxmtv android.permission.WRITE_SECURE_SETTINGS
+adb shell cmd notification allow_listener io.github.ariinyume.fkuxmtv/io.github.ariinyume.fkuxmtv.RevivalListener
 ```
 
 ## 从源码构建
