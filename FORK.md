@@ -419,21 +419,8 @@ FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME`
 | [op7418/guizang-tv](https://github.com/op7418/guizang-tv) | MIT | 整个桌面本体，本分支的上游 |
 | [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) | MIT | 原生列表桌面与小米适配的起点 |
 | [nthnclrk/CleanFrame](https://github.com/nthnclrk/CleanFrame) | MIT | 界面方向：照片背景、大字纵向列表、克制的焦点高亮 |
-| **[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)** | MIT | 桌面守护与强杀复活的整套思路，见下 |
+| **[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)** | MIT | 桌面守护与强杀复活的整套思路 |
 
-### 对 [pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv) 的致谢
-
-[aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT License，Copyright (c) 2026 pengchujin）是同一类目标下做得更完整的一个项目：面向国产电视的 tvOS 风格桌面，「开机自动接管，待机也不会被清理」。本项目 v0.8 / v0.9 的两个关键突破，都是从它那里学来的：
-
-1. **`RevivalListener`：把「通知监听」当回程票。** 被 force-stop 的应用收不到广播、跑不了 JobScheduler，但系统会主动重绑已批准的通知监听，而且这个授权在 force-stop 后仍然留在设置里。它用这个空实现的监听器拿到了进程——本项目 `RevivalListener` 就是这个思路，连「什么都不读、只覆写 `onListenerConnected`」的做法都一样。
-2. **用 `WRITE_SECURE_SETTINGS` 把无障碍授权写回去**，再让系统自己重新绑定，而不是试图保住进程不被杀。
-3. **`HomeGuardService` 的判定节奏**：原桌面回到前台 → 等一拍 → 确认还停在那儿 → 才拉回本桌面。本项目 `HomeGuardPolicy` 的 1.5 秒 settle 与「前台不是小米桌面就不动手」是同一条思路。
-4. **`excludeFromRecents` / `clearTaskOnLaunch` 的坑**：任务被 trim 之后再拉回会新建 Activity，焦点跳回第一个磁贴。本项目在 v0.8 直接把这两个属性去掉了。
-5. **`SyncAdapter` 兜底**：他们用它救 `ro.config.low_ram=true`、系统拒绝所有通知监听的机型（他们的 MiTV-MFTP0）。本机 `low_ram=false`，所以没做，但这条记录留在文档里，换机型时能直接抄。
-
-另外，它仓库里的 [`docs/devices/xiaomi-mitv-mftr0.md`](https://github.com/pengchujin/aerial-tv/blob/main/docs/devices/xiaomi-mitv-mftr0.md) 是同型号最早的一份实测记录，本项目阶段 2 开始前先读了它，才敢确定「通知监听在这台机器上确实能被重绑」。
-
-**边界**：本项目没有复制它的 Kotlin 源码，上述部分是针对本机固件（MiTV-MFTR0 / Android 11）用 Java 重写的，判定条件、阈值和失败分支都按本机实测结果重新定过。它的代码同为 MIT，即便个别调用序列雷同，也仍在许可范围内。
 
 ## 仓库与分发边界
 
