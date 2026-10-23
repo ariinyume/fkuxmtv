@@ -74,7 +74,7 @@ public final class FrameHomeActivity extends Activity implements HomeSurface.Act
         else if(index==1){if(!XiaomiControls.showInputs(this))message("暂时无法打开信号源");}
         else settings.show();
     }
-    void stockHome(){if(!XiaomiControls.startStockHome(this,new ComponentName("com.mitv.tvhome","com.mitv.tvhome.MainActivity")))message("暂时无法打开小米原桌面");}
+    void stockHome(){HomeGuard.userExited(this);if(!XiaomiControls.startStockHome(this,new ComponentName("com.mitv.tvhome","com.mitv.tvhome.MainActivity")))message("暂时无法打开小米原桌面");}
     void systemSettings(){Intent i=XiaomiControls.settings(this,Settings.ACTION_SETTINGS);if(i==null)i=new Intent(Settings.ACTION_SETTINGS);launch(i,"暂时无法打开设置");}
     private void launch(Intent i,String error){if(i==null){message(error);return;}try{startActivity(i);}catch(RuntimeException unavailable){message(error);}}
     private void showLibrary(){
@@ -90,7 +90,7 @@ public final class FrameHomeActivity extends Activity implements HomeSurface.Act
     @Override protected void onDestroy(){settings.close();weather.destroy();wallpapers.destroy();handler.removeCallbacksAndMessages(null);super.onDestroy();}
     @Override public void onBackPressed(){if(surface.controls.contains(getCurrentFocus()))surface.focusApp();else if(XiaomiControls.enabled())stockHome();else super.onBackPressed();}
     @Override public void dump(String prefix,java.io.FileDescriptor fd,java.io.PrintWriter out,String[] args){
-        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);WakeHome.dump(this,out);weather.dump(out);
+        super.dump(prefix,fd,out,args);wallpapers.dump(out);BootStart.dump(this,out);WakeHome.dump(this,out);HomeGuard.dump(this,out);weather.dump(out);
         out.println("HomeAppearance: "+appearance.prefs.getAll()+" items="+items.order+" settings="+settings.page());
     }
     void message(String value){Toast.makeText(this,value,Toast.LENGTH_LONG).show();}

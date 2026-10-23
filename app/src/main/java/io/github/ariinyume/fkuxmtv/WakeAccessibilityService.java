@@ -25,9 +25,15 @@ import android.view.accessibility.AccessibilityEvent;
  * 1. {@code TYPE_WINDOW_STATE_CHANGED} for the stock home right after a wake-up (event driven);
  * 2. a single usage-stats probe ~1.5s after SCREEN_ON, for firmware that does not re-emit a
  *    window event when the launcher never lost focus.
+ *
+ * A second, independent trigger runs the home guard: whenever the stock home becomes visible,
+ * {@link HomeGuardPolicy} decides whether to pull this home back in front. It is deliberately
+ * separate from the wake switch — turning one off must not silently change the other.
  */
 public final class WakeAccessibilityService extends AccessibilityService {
     private static final String TAG = "GuiZangWake";
+    /** A window event older than this is no longer evidence of what is in front. */
+    private static final long FOREGROUND_STALE_MS = 5000;
 
     /** Runtime truth: is the system currently holding this service? */
     static volatile boolean connected;
@@ -50,6 +56,7 @@ public final class WakeAccessibilityService extends AccessibilityService {
                 wakeAt = 0;
                 handledWakeAt = 0;
                 probes = 0;
+                HomeGuard.resetAttempts(WakeAccessibilityService.this);
                 return;
             }
             if (Intent.ACTION_SCREEN_ON.equals(action) || Intent.ACTION_USER_PRESENT.equals(action))
@@ -89,7 +96,7 @@ public final class WakeAccessibilityService extends AccessibilityService {
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || !WakeHome.enabled(this)) return;
+        if (event == null) return;
         int type = event.getEventType();
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
@@ -97,8 +104,62 @@ public final class WakeAccessibilityService extends AccessibilityService {
         if (name == null) return;
         lastEventPackage = name.toString();
         lastEventAt = SystemClock.elapsedRealtime();
-        if (!WakePolicy.STOCK_HOME.equals(lastEventPackage)) return;
+        boolean stockHome = WakePolicy.STOCK_HOME.equals(lastEventPackage);
+        if (stockHome && HomeGuard.enabled(this)) scheduleGuard();
+        // Leaving the stock home ends the quiet period, so the next Home press is ours again.
+        // Our own package is excluded: pausing while we hand over to the stock home must not
+        // cancel the quiet period we just asked for.
+        if (!stockHome && !getPackageName().equals(lastEventPackage)) HomeGuard.clearUserExit(this);
+        if (!stockHome || !WakeHome.enabled(this)) return;
         evaluate(lastEventPackage, "无障碍事件");
+    }
+
+    /** The stock home just appeared: wait for the firmware to settle before deciding. */
+    private void scheduleGuard() {
+        handler.removeCallbacks(guard);
+        handler.postDelayed(guard, HomeGuardPolicy.SETTLE_MS);
+    }
+
+    private final Runnable guard = new Runnable() {
+        @Override public void run() {
+            if (!HomeGuard.enabled(WakeAccessibilityService.this)) return;
+            long now = SystemClock.elapsedRealtime();
+            String foreground = lastEventPackage;
+            if (now - lastEventAt > FOREGROUND_STALE_MS) {
+                // No window event for a while (some firmware keeps the launcher's window alive):
+                // fall back to usage stats when that grant happens to be available.
+                String usage = WakeHome.foreground(WakeAccessibilityService.this);
+                if (usage != null) foreground = usage;
+            }
+            String reason = HomeGuardPolicy.blockReason(XiaomiControls.enabled(),
+                    HomeGuard.enabled(WakeAccessibilityService.this),
+                    power != null && power.isInteractive(), WakeHome.visible, foreground,
+                    HomeGuard.sinceUserExit(WakeAccessibilityService.this, now),
+                    HomeGuard.attempts(WakeAccessibilityService.this, now),
+                    HomeGuard.sinceAttempt(WakeAccessibilityService.this, now));
+            if (reason != null) {
+                Log.i(TAG, "guard skipped (" + foreground + "): " + reason);
+                if (HomeGuardPolicy.capped(reason)) HomeGuard.note(WakeAccessibilityService.this, reason);
+                return;
+            }
+            pullHome();
+        }
+    };
+
+    private void pullHome() {
+        int count = HomeGuard.noteAttempt(this, SystemClock.elapsedRealtime());
+        try {
+            startActivity(new Intent(this, FrameHomeActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+        } catch (RuntimeException refused) {
+            Log.w(TAG, "guard launch refused", refused);
+            HomeGuard.note(this, "守护拉起被系统拒绝（" + refused.getClass().getSimpleName() + "）");
+            return;
+        }
+        Log.i(TAG, "guard pull #" + count);
+        handler.postDelayed(() -> HomeGuard.note(this,
+                (WakeHome.visible ? "守护接管成功" : "守护发出启动但界面没出来") + " · " + stamp()), 1000);
     }
 
     /** Foreground probe. Only runs inside a wake window, at most once (plus one retry). */

@@ -20,6 +20,10 @@ final class XiaomiControls {
         return XIAOMI_TV.matcher(model).matches();
     }
 
+    static String model() {
+        return Build.MODEL == null || Build.MODEL.isEmpty() ? "未知" : Build.MODEL;
+    }
+
     /** Observed on MiTV-MTSU0 firmware: source 23 = HDMI 1, source 24 = HDMI 2. */
     static boolean openHdmi(Context context, int port) {
         if (port < 1 || port > 2) return false;
