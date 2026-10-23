@@ -69,9 +69,9 @@ adb install -r guizang-tv-v0.3.0.apk
 | Switch 2 → HDMI 1 直达 | ✅ 点按可直达（与 MiTV-MTSU0 同为 23 端口） |
 | 开机自动进入（`start_3rd_app`，走完整开机链） | ✅ 实测可用：真重启后前台即本桌面，进程在开机约 30 秒被拉起 |
 | 开机自动进入（v0.5 系统 `BOOT_COMPLETED`，方案 A） | ❌ 未生效：广播送达晚于小米私有广播，当次进场由老路径完成 |
-| 短按遥控器电源键（真待机） | ⚠️ `killAllThirdApp` 强杀进程并删除无障碍授权；v0.9 起 199 毫秒内自动复活并写回授权 |
+| 短按遥控器电源键（真待机） | ✅ `killAllThirdApp` 强杀进程并删除无障碍授权；v0.10 起 5.7 秒内自动复活、写回授权，唤醒直接回本桌面（2026-10-23 实测） |
 | `KEYCODE_SLEEP` 熄屏后唤醒 | ✅ 进程存活、授权未被改写，唤醒回本桌面（2026-10-23 修正） |
-| 被强杀后自动恢复（v0.9） | ✅ 通知监听重绑 → `WRITE_SECURE_SETTINGS` 写回授权 → 守护重新接管（需两项 adb 授权） |
+| 被强杀后自动恢复（v0.9 起，v0.10 收尾） | ✅ 通知监听重绑 → `WRITE_SECURE_SETTINGS` 写回授权 → 守护重新接管（需两项 adb 授权） |
 | 桌面守护：回小米桌面即切回（v0.8） | ✅ 1.5 秒后接管；切 HDMI / 播放器不会被抢 |
 | HOME 键接管（cleanyourtv 方案） | ❌ 澎湃 2 上四道锁破不了；强禁 tvhome 会让开机黑屏 |
 
@@ -96,7 +96,9 @@ cleanyourtv 手法与两份研究文档见 `FORK.md` 的「开机自启实测」
 
 但用 `KEYCODE_SLEEP` 只熄屏时，进程和授权都还在：熄屏 30 秒、180 秒后进程仍存活、`enabled_accessibility_services` 未被改写，唤醒直接回到本桌面。所以「息屏唤醒 = 回小米桌面」不是固件硬结论，**真正的硬约束只有遥控器电源键这一条**。例外仍是**断电 / 关机再开机**（含 `adb reboot`）：走完整开机链，`start_3rd_app` 还在，开机自动进入照常生效。
 
-v0.9 把这个缺口补上了（详见 `FORK.md` 的「被强杀后自动恢复」）：被强杀的应用收不到广播、跑不了定时任务，唯一能拿到进程的入口是**系统重新绑定通知监听**——这个授权在 force-stop 之后不会被删。借这次绑定用 `WRITE_SECURE_SETTINGS` 把无障碍授权写回去，守护随即复活。实测从被杀到授权写回 199 毫秒。代价是这两个权限只能靠 adb（重装后要重做），实现在 `Revival.java` / `RevivalListener.java`。
+v0.9 把这个缺口补上了（详见 `FORK.md` 的「被强杀后自动恢复」）：被强杀的应用收不到广播、跑不了定时任务，唯一能拿到进程的入口是**系统重新绑定通知监听**——这个授权在 force-stop 之后不会被删。借这次绑定用 `WRITE_SECURE_SETTINGS` 把无障碍授权写回去，守护随即复活。代价是这两个权限只能靠 adb（重装后要重做），实现在 `Revival.java` / `RevivalListener.java`。
+
+v0.10 修了真实待机才暴露的一处顺序问题：`killAllThirdApp` 是连续 force-stop 十几个包，我们这条的无障碍清除会落在「监听已重绑、进程已起来」之后，v0.9 因此在第一次检查时读到旧列表、以为不用写，只能等系统 22 秒后自己重试。改成有界的三轮「检查 → 写回 → 强制重绑」循环后，实测从被杀到守护回来由 **21.6 秒缩到 5.7 秒**。这 5～6 秒内按 Home 仍不会被接管，是这套方案的固有窗口。
 
 **桌面守护（v0.8，默认开启）** 解决的是另一半：HOME 键被固件写死到 `com.mitv.tvhome`，`set-home-activity` 报 Success 却不生效，所以不去争「默认桌面」这个身份，改成「小米桌面一出现在前台就盖掉」。判定条件全在 `HomeGuardPolicy` 里：前台必须是 `com.mitv.tvhome`、屏幕亮着、自己不在前台、两次接管间隔 ≥ 4 秒、1 分钟最多 3 次；事件到达后先等 1.5 秒再确认一次才动手。主动去小米桌面（按返回键或点「小米原桌面」磁贴）会获得 5 分钟安静期，一离开小米桌面立即解除。
 
@@ -174,5 +176,7 @@ gradle :app:assembleDebug
 本项目起步于 [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) 的本地定制，整理时提取了本次实现的原生列表桌面及小米适配。公开版不包含上游的一键清理脚本、旧 Dock 桌面、无障碍按键服务或系统应用禁用流程。
 
 界面方向参考 [nthnclrk/CleanFrame](https://github.com/nthnclrk/CleanFrame)：照片背景、大字纵向列表、克制的焦点高亮，以及分组设置、预览和确认应用的交互。Android 界面使用原生 Java 实现，没有移植 Tizen 运行代码或附带其照片。
+
+本分支的「桌面守护」与「被强杀后自动恢复」两套机制，思路来自 [pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT License，Copyright (c) 2026 pengchujin）——一个同样面向国产电视的 tvOS 风格桌面。它先于本项目跑通了这条链路：用空实现的 `NotificationListenerService` 当「被 force-stop 之后唯一还能拿到进程」的入口，再用 `WRITE_SECURE_SETTINGS` 把被删掉的无障碍授权写回去；桌面守护则是「原桌面回到前台 → 等一拍确认还在 → 拉到本桌面」。另外两个坑也是它踩出来的：`excludeFromRecents` / `clearTaskOnLaunch` 会让被 trim 的任务拉回时丢焦点；`ro.config.low_ram=true` 的机型系统会拒绝所有通知监听，需要 SyncAdapter 兜底（本机不适用，说明见 [FORK.md](FORK.md)）。本项目没有复制它的 Kotlin 源码，上述部分是针对本机固件用 Java 重写的；它的 `docs/devices/xiaomi-mitv-mftr0.md` 也是同型号最早的一份实测记录。
 
 代码采用 MIT 许可，保留上游署名。详细来源见 [NOTICE.md](NOTICE.md)。

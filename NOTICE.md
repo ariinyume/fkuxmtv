@@ -10,6 +10,13 @@
   - 参考其分组、首页预览、焦点与已应用值分离、确认应用和逐层返回的交互。
   - 本项目没有打包其 Tizen 代码、字体或照片。
   - 图标采用下述开源 SVG，不打包 Android 应用的原始图标。
+- 桌面守护与被强杀后自动恢复的机制参考：pengchujin/aerial-tv，MIT License，Copyright (c) 2026 pengchujin。
+  - https://github.com/pengchujin/aerial-tv
+  - 参考其「空实现通知监听作为 force-stop 后的复活入口，再用 WRITE_SECURE_SETTINGS 写回无障碍授权」的链路，
+    以及「原桌面回到前台后延迟一拍、确认仍在前台再拉回」的守护判定与拉回时去掉 `excludeFromRecents` /
+    `clearTaskOnLaunch` 的处理。
+  - 本项目没有复制其 Kotlin 源码，相关部分为针对本机固件（MiTV-MFTR0 / Android 11）的 Java 独立实现，
+    调用序列与判定条件按本机实测结果重写。
 - 默认渐变、布局示意及本项目绘制代码采用 MIT 许可。
 - 品牌 SVG：Simple Icons，CC0-1.0；工具 SVG：Phosphor Icons Fill（勾选与箭头为 Regular），MIT。原 SVG、精确提交来源与许可证位于 `app/src/main/assets/icons/`；Android VectorDrawable 是同一路径数据的格式转换。商标权不因图标的开源许可而转移。
 - 使用 Android 系统字体，不打包 Outfit 字体。

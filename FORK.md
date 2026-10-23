@@ -17,7 +17,7 @@
 | 默认次项 | Apple TV → HDMI 1 | Apple TV → HDMI 2（避免与 Switch 2 抢端口） |
 | 首项图标 | PlayStation 标志 | Nintendo Switch 标志（`mark_nintendo_switch.xml`，Simple Icons CC0） |
 | 应用显示名 | 归藏电视 | **大米电视**（电视应用列表里与原版区分） |
-| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.9` / code 14 |
+| 版本 | `0.4.0-dev` / code 5 | `0.4.0-fkuxmtv.10` / code 15 |
 | 壁纸 | 仅内置五张 Unsplash | 构建时打包 `F:\Desktop\壁纸` 的 15 张图，优先于内置照片 |
 | 机型门禁 | 仅 `MiTV-MTSU0` | 识别小米电视家族（`MiTV*` / `L\d{2}M\d` 等），含目标机 **MiTV-MFTR0**；HDMI 直达不再硬性依赖机型名 |
 | 开机进入 | 无（依赖小米 `start_3rd_app`） | 吃系统 `BOOT_COMPLETED`，`SYSTEM_ALERT_WINDOW` 作后台启动豁免；`start_3rd_app` 保留兜底 |
@@ -34,7 +34,7 @@
 - `AndroidManifest.xml`：`RECEIVE_BOOT_COMPLETED` + `SYSTEM_ALERT_WINDOW`，注册 `BootReceiver`
 - `WakeHome.java` / `WakePolicy.java` / `WakeAccessibilityService.java`：唤醒进入（新增）
 - `HomeGuard.java` / `HomeGuardPolicy.java`：桌面守护（新增，v0.8）；`WakeAccessibilityService` 同一条无障碍通道里跑两套闸门
-- `Revival.java` / `RevivalListener.java` / `A11yList.java` / `App.java`：被强杀后的自动恢复（新增，v0.9）；`A11yList` 是纯逻辑，JUnit 覆盖
+- `Revival.java` / `RevivalListener.java` / `A11yList.java` / `App.java`：被强杀后的自动恢复（v0.9 新增，v0.10 补上有界重试链）；`A11yList` 是纯逻辑，JUnit 覆盖
 - `AndroidManifest.xml`：`WRITE_SECURE_SETTINGS`（需 adb 授予）、`RevivalListener` 通知监听服务、`android:name=".App"`
 - `res/xml/accessibility_service_config.xml`：只接收窗口切换事件，不读窗口内容
 - `HomeIcons.java`：`hdmi:1` → Switch 图标，`hdmi:2` → Apple TV 图标
@@ -71,7 +71,7 @@
 
 ```sh
 adb connect <电视IP>:5555
-adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.9.apk
+adb install -r dist/guizang-tv-fkuxmtv-0.4.0-fkuxmtv.10.apk
 # 下面三项重装/换签名后都要重做一次（都是「系统权限」，装的时候不会自动给）
 adb shell appops set io.github.ariinyume.fkuxmtv SYSTEM_ALERT_WINDOW allow      # 开机自动进入
 adb shell pm grant io.github.ariinyume.fkuxmtv android.permission.WRITE_SECURE_SETTINGS  # 自动恢复：写回无障碍授权
@@ -308,9 +308,40 @@ Android 对「被强制停止」的应用有一条铁律：**收不到广播、�
 
 aerial-tv 还备了一条 `SyncAdapter` 复活路径，用来对付「Android 9 且 `ro.config.low_ram=true` 时系统拒绝所有通知监听」的机型（他们的 MiTV-MFTP0）。本机 `ro.config.low_ram=false`，通知监听 199ms 就回来了，再加一个账户 + 同步适配器只会多出一套系统账户和绑定服务，覆盖不到任何本机场景——所以不做，只在这里留个记录。
 
+### 电源键真实待机实测（2026-10-23 11:31，v0.9 暴露的缺口）
+
+上面那条 `am force-stop` 是自己按下去就完了，顺序正好：条目被删 → 进程死 → 系统重绑监听 → 我们立刻写回。**真实电源键不一样**：`killAllThirdApp` 是在一个循环里连续 force-stop 十几个包，我们自己那条的无障碍清除落在了「监听已经重绑、进程已经起来」**之后**。于是 v0.9 的 `ensure()` 读到的还是旧列表（`A11yList.has` 为真），以为不用写，4 秒后那次检查又因为「条目已被删」直接 return，**没人写回**，只能等系统自己重试：
+
+```
+11:31:44.691 Killing 25763:...fkuxmtv (adj 100): stop
+11:31:44.694 notification listener binding died
+11:31:44.704 MitvActivityManagerService: ... killAllThirdApp forcestop packageName:io.github.ariinyume.fkuxmtv
+11:31:44.792 Start proc 26063 ... for service {...RevivalListener}
+11:31:44.896 GuiZangRevive: notification listener bound      ← 此刻读到的还是旧列表，判断「无需写回」
+11:32:07.500 GuiZangRevive: notification listener bound      ← 系统 22.6 秒后才第二次重绑
+11:32:07.504 GuiZangRevive: grant restored via 通知监听
+11:32:13.012 GuiZangRevive: asked Android to bind the service again
+11:32:13.024 GuiZangWake: accessibility service connected     ← 守护到这一刻才真正回来
+```
+
+即 **21.6 秒**里守护是死的。这段时间如果用户按 Home，电视就停在小米桌面不动了。
+
+**v0.10 的修法**：把「一次检查」改成**有界的三轮循环**（`Revival.round()`），每轮都先 `restoreEntry()` 再决定要不要强制重绑，「条目没了」由本轮自己写回，不再指望下一次系统重绑；`repairRunning` 保证一个进程只跑一条链，`MAX_ROUNDS = 3` 保证跑不通也不会空转。同样是 force-stop 复现，v0.10：
+
+```
+11:36:39.265 Killing 27157:...fkuxmtv (adj 0): stop
+11:36:39.339 Start proc 27456 ... for service {...RevivalListener}
+11:36:39.410 notification listener bound
+11:36:39.419 grant restored via 通知监听
+11:36:44.926 asked Android to bind the service again
+11:36:44.940 accessibility service connected            ← 5.7 秒
+```
+
+**21.6 秒 → 5.7 秒**。剩下的 5.7 秒结构上是「4 秒宽限 + 1.5 秒删除/重加间隔」，是让系统自己绑与强制绑之间的取舍，再压就得牺牲「不跟系统 binder 抢」的稳定性。
+
 ### 一个仍存在的窗口
 
-从「被杀」到「授权写回」之间的 200ms 里，如果用户恰好按了 Home，会看到小米桌面；之后 1.5 秒内被守护接管。这段闪一下无法消除，是这套方案的固有代价。
+从「被杀」到「无障碍服务重新连上」的这 5～6 秒里，`HomeGuard` 和 `WakeHome` 都不在线：**这段时间按 Home 不会被接管**（待机唤醒回本桌面不受影响，因为系统恢复的是上次的任务栈）。如果用户在 5 秒内就按了 Home，会停在小米桌面，直到下一次回到小米桌面才会被守护拉回。这个窗口消不掉——除非常驻一个杀不掉的服务，而这台固件不给。
 
 ## 开机自启实测（2026-10-22）
 
@@ -379,6 +410,31 @@ HOME 键回 tvhome，桌面恢复，`user_mode=2` 未丢。**没有物理恢复�
 FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME` 能拿到（角色系统认本桌面），
 但 MIUI 的按键路径根本不问它。**对普通用户，开机自启就是最优解**；真要接管 HOME 得 root 后改框架。
 
+## 参考与致谢
+
+本分支能走到「待机唤醒也能回本桌面」，主要是站在别人的肩膀上：
+
+| 项目 | 许可 | 借鉴了什么 |
+| --- | --- | --- |
+| [op7418/guizang-tv](https://github.com/op7418/guizang-tv) | MIT | 整个桌面本体，本分支的上游 |
+| [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) | MIT | 原生列表桌面与小米适配的起点 |
+| [nthnclrk/CleanFrame](https://github.com/nthnclrk/CleanFrame) | MIT | 界面方向：照片背景、大字纵向列表、克制的焦点高亮 |
+| **[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)** | MIT | 桌面守护与强杀复活的整套思路，见下 |
+
+### 对 [pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv) 的致谢
+
+[aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT License，Copyright (c) 2026 pengchujin）是同一类目标下做得更完整的一个项目：面向国产电视的 tvOS 风格桌面，「开机自动接管，待机也不会被清理」。本项目 v0.8 / v0.9 的两个关键突破，都是从它那里学来的：
+
+1. **`RevivalListener`：把「通知监听」当回程票。** 被 force-stop 的应用收不到广播、跑不了 JobScheduler，但系统会主动重绑已批准的通知监听，而且这个授权在 force-stop 后仍然留在设置里。它用这个空实现的监听器拿到了进程——本项目 `RevivalListener` 就是这个思路，连「什么都不读、只覆写 `onListenerConnected`」的做法都一样。
+2. **用 `WRITE_SECURE_SETTINGS` 把无障碍授权写回去**，再让系统自己重新绑定，而不是试图保住进程不被杀。
+3. **`HomeGuardService` 的判定节奏**：原桌面回到前台 → 等一拍 → 确认还停在那儿 → 才拉回本桌面。本项目 `HomeGuardPolicy` 的 1.5 秒 settle 与「前台不是小米桌面就不动手」是同一条思路。
+4. **`excludeFromRecents` / `clearTaskOnLaunch` 的坑**：任务被 trim 之后再拉回会新建 Activity，焦点跳回第一个磁贴。本项目在 v0.8 直接把这两个属性去掉了。
+5. **`SyncAdapter` 兜底**：他们用它救 `ro.config.low_ram=true`、系统拒绝所有通知监听的机型（他们的 MiTV-MFTP0）。本机 `low_ram=false`，所以没做，但这条记录留在文档里，换机型时能直接抄。
+
+另外，它仓库里的 [`docs/devices/xiaomi-mitv-mftr0.md`](https://github.com/pengchujin/aerial-tv/blob/main/docs/devices/xiaomi-mitv-mftr0.md) 是同型号最早的一份实测记录，本项目阶段 2 开始前先读了它，才敢确定「通知监听在这台机器上确实能被重绑」。
+
+**边界**：本项目没有复制它的 Kotlin 源码，上述部分是针对本机固件（MiTV-MFTR0 / Android 11）用 Java 重写的，判定条件、阈值和失败分支都按本机实测结果重新定过。它的代码同为 MIT，即便个别调用序列雷同，也仍在许可范围内。
+
 ## 仓库与分发边界
 
 - 本仓库**只存放代码**。自选壁纸（`assets/wallpapers/local/`）与构建产物（APK）**不进仓库、不发 GitHub Release**。
@@ -391,8 +447,8 @@ FallbackHome / 遥控器服务组件——无 root 全部破不了。`ROLE_HOME`
 - 已在真机 `MiTV-MFTR0` 验证，首次安装请先确认 HDMI 按钮行为。
 - 本分支签名与上游官方 APK 不同，不能覆盖安装原版，也不能被原版覆盖。
 - 壁纸来自本地目录，仅自用分发；公开分发需确认图片授权。
-- **遥控器电源键待机会强杀进程**（`killAllThirdApp`，并把无障碍授权从系统设置里删掉）：v0.9 起可自愈——系统重新绑定通知监听时，用 `WRITE_SECURE_SETTINGS` 把授权写回去（实测 199ms）。代价是这两个权限只能用 adb 授予，重装后要重做（见「安装」）；并且**恢复那一刻如果前台是小米桌面，会先闪一下再被守护接管**。
-- **桌面守护依赖无障碍服务在线**：进程被杀后守护随之消失，v0.9 起会在 200ms 内复活；此外 1 分钟内接管上限 3 次，超出会停手（防弹跳），亮屏后自动归零。
+- **遥控器电源键待机会强杀进程**（`killAllThirdApp`，并把无障碍授权从系统设置里删掉）：v0.9 起可自愈——系统重新绑定通知监听时，用 `WRITE_SECURE_SETTINGS` 把授权写回去。v0.10 修掉了一个真实待机才会出现的顺序问题（授权清除落在监听重绑之后），恢复耗时从 **21.6 秒压到 5.7 秒**（实测记录见「[被强杀后自动恢复](#被强杀后自动恢复v09-2026-10-23)」）。代价是这两个权限只能用 adb 授予，重装后要重做（见「安装」）；并且这 5～6 秒内守护不在线，按 Home 不会被接管。
+- **桌面守护依赖无障碍服务在线**：进程被杀后守护随之消失，v0.10 起约 5.7 秒回来；此外 1 分钟内接管上限 3 次，超出会停手（防弹跳），亮屏后自动归零。
 - 开机自动进入有两条路：`BOOT_COMPLETED`（需 `SYSTEM_ALERT_WINDOW` app-op，否则被后台启动限制拦下）与 `start_3rd_app` 兜底。固件升级后两者都可能变化，升级后请重新确认。
 - 方案 A（`BOOT_COMPLETED`）已在 MiTV-MFTR0 上实测：广播送达晚于小米私有广播，**未构成实际进场路径**（详见「开机自启实测」）；`start_3rd_app` 仍是唯一有效路径。
 - 运行中按遥控器 Home 键仍会**先**回小米原桌面（`com.mitv.tvhome.permission.HOME_STATE` 由固件持有，无 root 改不了；`cmd package set-home-activity` 在该固件报 Success 但不生效），v0.8 起由「桌面守护」在 1.5 秒后切回本桌面。

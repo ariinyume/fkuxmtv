@@ -48,10 +48,16 @@ final class Revival {
     private static final long REBIND_GAP_MS = 1500;
     /** One forced rebind per half minute is plenty; more would just fight the system binder. */
     private static final long REBIND_COOLDOWN_MS = 30_000;
+    /**
+     * Rounds in one repair chain: check → write the entry back if it was stripped → force a
+     * rebind. Three is enough for "stripped entries" (restore, then bind) and for "entry kept but
+     * nothing bound" (splice once), and bounded so a firmware that never binds cannot spin.
+     */
+    private static final int MAX_ROUNDS = 3;
 
     private static final Handler HANDLER = new Handler(Looper.getMainLooper());
     private static Context app;
-    private static boolean rebindQueued;
+    private static boolean repairRunning;
 
     private Revival() { }
 
@@ -121,18 +127,8 @@ final class Revival {
         }
         boolean restored;
         try {
-            String current = Settings.Secure.getString(c.getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            String me = own(c);
-            restored = !A11yList.has(current, me);
-            if (restored) {
-                String next = A11yList.with(current, me);
-                Settings.Secure.putString(c.getContentResolver(),
-                        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, next);
-                Settings.Secure.putInt(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
-                bump(c, "恢复", source);
-                Log.i(TAG, "grant restored via " + source + ": " + next);
-            } else if (!WakeAccessibilityService.connected) {
+            restored = restoreEntry(c, source);
+            if (!restored && !WakeAccessibilityService.connected) {
                 // Listed, but nothing bound: the master switch may have been flipped off, or the
                 // service was killed while its entry survived. Nudging the switch is enough.
                 Settings.Secure.putInt(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
@@ -142,20 +138,70 @@ final class Revival {
             note(c, "写设置被拒绝（" + source + "）：" + refused.getClass().getSimpleName());
             return false;
         }
-        if (!WakeAccessibilityService.connected) scheduleRebind(c, source);
+        if (!WakeAccessibilityService.connected) startRepair(c, source);
         return restored;
     }
 
-    private static void scheduleRebind(Context c, String source) {
-        if (rebindQueued) return;
-        rebindQueued = true;
+    /**
+     * Puts the entry back if the firmware stripped it. Separate from {@link #ensure} because the
+     * repair chain needs it on every round: the force-stop that removes the entry lands a few
+     * hundred milliseconds *after* the listener binds, so the first read often still sees the old
+     * list and the entry only turns up missing on the next round.
+     *
+     * @return true when the entry had been missing and has just been written back.
+     */
+    private static boolean restoreEntry(Context c, String source) {
+        String current = Settings.Secure.getString(c.getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        String me = own(c);
+        if (A11yList.has(current, me)) return false;
+        String next = A11yList.with(current, me);
+        Settings.Secure.putString(c.getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, next);
+        Settings.Secure.putInt(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+        bump(c, "恢复", source);
+        Log.i(TAG, "grant restored via " + source + ": " + next);
+        return true;
+    }
+
+    /** Starts at most one repair chain per process; rounds re-arm themselves while they run. */
+    private static void startRepair(Context c, String source) {
+        if (repairRunning) return;
+        repairRunning = true;
+        round(c, source, 0);
+    }
+
+    private static void round(Context c, String source, int n) {
         HANDLER.postDelayed(() -> {
-            rebindQueued = false;
-            if (WakeAccessibilityService.connected) return;
-            long since = SystemClock.elapsedRealtime() - prefs(c).getLong("rebind-at", -1L);
-            if (since >= 0 && since < REBIND_COOLDOWN_MS) return;
-            rebind(c, source);
+            if (WakeAccessibilityService.connected) { repairRunning = false; return; }
+            if (!granted(c) || !wanted(c)) { repairRunning = false; return; }
+            try {
+                if (restoreEntry(c, source)) {
+                    // Freshly written: Android binds it by itself within a second or two. If it
+                    // does not, the next round does the remove/add dance.
+                    round(c, source, n + 1);
+                    return;
+                }
+                if (n == 0 && recentlyRebound(c)) { repairRunning = false; return; }
+                if (n >= MAX_ROUNDS) {
+                    Log.w(TAG, "gave up repairing the grant after " + n + " rounds (" + source + ")");
+                    note(c, "本轮恢复没成功，下次开机或手动打开应用时再试（" + source + "）");
+                    repairRunning = false;
+                    return;
+                }
+                rebind(c, source);
+                round(c, source, n + 1);
+            } catch (RuntimeException failed) {
+                Log.w(TAG, "repair round failed (" + source + ")", failed);
+                note(c, "恢复过程出错（" + source + "）：" + failed.getClass().getSimpleName());
+                repairRunning = false;
+            }
         }, BIND_GRACE_MS);
+    }
+
+    private static boolean recentlyRebound(Context c) {
+        long since = SystemClock.elapsedRealtime() - prefs(c).getLong("rebind-at", -1L);
+        return since >= 0 && since < REBIND_COOLDOWN_MS;
     }
 
     /**
