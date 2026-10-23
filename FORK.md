@@ -371,7 +371,7 @@ aerial-tv 还备了一条 `SyncAdapter` 复活路径，用来对付「Android 9 
 - 《cleanyourtv_HOME接管机制研究》 https://www.workbuddy.cn/space/d/jBCrx54mh7R3tYhnvGqUp7
 - 《fkuxmtv_开机自启改造包（方案 A）》 https://www.workbuddy.cn/space/d/dhfFkqXYcO2xxDDtyO6gWa
 
-### cleanyourtv 的手法（值得抄的部分）
+### cleanyourtv 的手法
 
 没有黑科技，靠时序五步：识别原版桌面（白名单含 `com.mitv.tvhome`）→ 装新 launcher →
 `am start -W` 先验证新桌面起得来 → `pm disable-user com.mitv.tvhome` →
